@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  ai-engine:
+    build: .
+    container_name: builder-ai-engine
+    ports:
+      - "3100:3100"
+    environment:
+      - PORT=3100
+      - DEBUG=False
+      - SANDBOX_PROVIDER=${SANDBOX_PROVIDER:-e2b}
+      - E2B_API_KEY=${E2B_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - DEFAULT_AI_MODEL=${DEFAULT_AI_MODEL:-anthropic/claude-3-5-sonnet-20241022}
+    env_file:
+      - .env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3100/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

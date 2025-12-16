@@ -1,0 +1,82 @@
+# GitHub Repository Description
+# (Use this for the short description at the top of your GitHub repo)
+
+🤖 Production-ready AI code generation engine built with FastAPI. Multi-provider AI support (Claude, GPT-4, Gemini), sandbox management (E2B, Vercel), real-time streaming, and automatic package detection. 10 RESTful APIs with Swagger docs.
+
+---
+
+# GitHub "About" Topics/Tags
+# (Add these tags to your repository)
+
+python
+fastapi
+ai
+artificial-intelligence
+code-generation
+anthropic
+claude
+openai
+gpt4
+gemini
+sandbox
+e2b
+vercel
+api
+rest-api
+swagger
+openapi
+streaming
+sse
+server-sent-events
+async
+microservice
+typescript-alternative
+react
+vite
+package-manager
+npm
+conversation-ai
+code-assistant
+developer-tools
+automation
+
+---
+
+# GitHub Social Preview Text
+# (For the social card when sharing)
+
+Title: Builder AI Engine - Python Edition
+Description: AI-powered code generation microservice with FastAPI. Supports multiple AI providers and sandbox environments with real-time streaming.
+
+---
+
+# One-Line Pitch
+# (For marketing/social media)
+
+"Generate, apply, and manage AI-powered code in isolated sandboxes with a single API call."
+
+---
+
+# Elevator Pitch
+# (30 seconds)
+
+Builder AI Engine is a production-ready FastAPI microservice that combines multiple AI providers (Anthropic, OpenAI, Google, Groq) with sandbox environments (E2B, Vercel) to generate, apply, and manage code automatically. It features real-time streaming, automatic package detection, conversation tracking, and multi-project isolation. Perfect for building AI coding assistants, automated development tools, or rapid prototyping platforms.
+
+---
+
+# Feature Highlights for GitHub Homepage
+
+✨ 5 AI Providers • 2 Sandbox Types • 10 REST APIs
+⚡ Real-time SSE Streaming • 🔒 Multi-Project Isolation
+📦 Auto Package Detection • 📚 Interactive Swagger Docs
+🐳 Docker Ready • 🚀 Production Ready
+
+---
+
+# Keywords for SEO
+
+ai code generation, fastapi microservice, anthropic claude api, openai gpt4 api,
+google gemini api, groq api, e2b sandbox, vercel sandbox, code generation api,
+ai coding assistant, automated code generation, real-time code streaming,
+package manager api, conversation ai, python fastapi, rest api,
+server sent events, async python, code automation, developer tools

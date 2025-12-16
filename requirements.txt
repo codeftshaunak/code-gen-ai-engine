@@ -1,0 +1,36 @@
+# FastAPI and Web Framework
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9
+
+# Pydantic for data validation
+pydantic>=2.9.0
+pydantic-settings>=2.5.0
+
+# Environment variables
+python-dotenv>=1.0.0
+
+# Utilities
+nanoid>=2.0.0
+
+# AI Provider SDKs
+anthropic>=0.34.0
+openai>=1.40.0
+google-generativeai>=0.7.0
+groq>=0.9.0
+
+# Sandbox Providers (optional - install as needed)
+# e2b-code-interpreter==2.0.0
+# Note: @vercel/sandbox is a Node.js package, use subprocess for Vercel CLI
+
+# HTTP client for API calls
+httpx>=0.27.0
+aiohttp>=3.9.0
+
+# JSON and data parsing
+orjson>=3.9.0
+
+# Testing (optional)
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+httpx-sse>=0.4.0
