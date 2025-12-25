@@ -1,143 +1,130 @@
-"""
-AI Provider Manager
-Supports multiple AI providers: Anthropic, OpenAI, Google, Groq, OpenRouter
-"""
-from typing import AsyncIterator, Optional, Dict, Any
+"""AI provider integration for streaming code generation using OpenRouter."""
+
 import asyncio
+from typing import AsyncGenerator, Optional
+from openai import AsyncOpenAI
 
 from app.config.settings import settings
 
 
-class AIProviderManager:
-    """Manages AI model providers and streaming code generation"""
+class AIProvider:
+    """Manages AI provider client and streaming via OpenRouter."""
 
     def __init__(self):
-        self.providers = {}
+        """Initialize AI provider client."""
+        self._openrouter_client: Optional[AsyncOpenAI] = None
 
-    async def generate_code_stream(
+    def _get_openrouter_client(self) -> AsyncOpenAI:
+        """Get or create OpenRouter client."""
+        if not self._openrouter_client:
+            if not settings.OPENROUTER_API_KEY:
+                raise ValueError(
+                    "OPENROUTER_API_KEY is required. Please set it in your .env file."
+                )
+            self._openrouter_client = AsyncOpenAI(
+                api_key=settings.OPENROUTER_API_KEY,
+                base_url=settings.OPENROUTER_BASE_URL
+            )
+        return self._openrouter_client
+
+    async def stream_with_retry(
         self,
-        prompt: str,
-        model: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None,
-        temperature: float = 0.7,
-        max_tokens: int = 8000
-    ) -> AsyncIterator[str]:
+        model: str,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float = None,
+        max_tokens: int = None
+    ) -> AsyncGenerator[str, None]:
         """
-        Generate code with streaming from AI model
+        Stream AI response with retry logic.
 
         Args:
-            prompt: User prompt
-            model: Model identifier (e.g., "anthropic/claude-3-5-sonnet-20241022")
-            context: Additional context (files, conversation history, etc.)
-            temperature: Model temperature
-            max_tokens: Maximum tokens to generate
+            model: Model identifier
+            system_prompt: System instructions
+            user_prompt: User message
+            temperature: Sampling temperature (default: settings.DEFAULT_TEMPERATURE)
+            max_tokens: Maximum tokens to generate (default: settings.MAX_TOKENS)
 
         Yields:
-            Streaming chunks of generated code
+            Text chunks from AI response
         """
-        model = model or settings.DEFAULT_AI_MODEL
-        provider, model_name = self._parse_model(model)
+        temperature = temperature or settings.DEFAULT_TEMPERATURE
+        max_tokens = max_tokens or settings.MAX_TOKENS
 
-        if provider == "anthropic":
-            async for chunk in self._stream_anthropic(prompt, model_name, context, temperature, max_tokens):
-                yield chunk
-        elif provider == "openai":
-            async for chunk in self._stream_openai(prompt, model_name, context, temperature, max_tokens):
-                yield chunk
-        elif provider == "google":
-            async for chunk in self._stream_google(prompt, model_name, context, temperature, max_tokens):
-                yield chunk
-        elif provider == "groq":
-            async for chunk in self._stream_groq(prompt, model_name, context, temperature, max_tokens):
-                yield chunk
-        elif provider == "openrouter":
-            async for chunk in self._stream_openrouter(prompt, model_name, context, temperature, max_tokens):
-                yield chunk
-        else:
-            raise ValueError(f"Unknown AI provider: {provider}")
+        retry_count = 0
+        last_error = None
 
-    def _parse_model(self, model: str) -> tuple:
-        """Parse model string into provider and model name"""
-        if "/" in model:
-            provider, model_name = model.split("/", 1)
-        else:
-            provider = "anthropic"
-            model_name = model
+        while retry_count <= settings.MAX_RETRIES:
+            try:
+                # Stream the response
+                async for chunk in self._stream_response(
+                    model, system_prompt, user_prompt, temperature, max_tokens
+                ):
+                    yield chunk
+                return  # Success - exit retry loop
 
-        return provider.lower(), model_name
+            except Exception as error:
+                last_error = error
+                error_msg = str(error).lower()
 
-    async def _stream_anthropic(self, prompt: str, model: str, context: Optional[Dict],
-                                temperature: float, max_tokens: int) -> AsyncIterator[str]:
-        """Stream from Anthropic Claude"""
-        if not settings.ANTHROPIC_API_KEY:
-            raise ValueError("ANTHROPIC_API_KEY not configured")
+                # Check if error is retryable
+                is_retryable = any(
+                    keyword in error_msg
+                    for keyword in ["service unavailable", "rate limit", "timeout", "overloaded"]
+                )
 
-        # In production, use anthropic library
-        # from anthropic import AsyncAnthropic
-        # client = AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
-        #
-        # async with client.messages.stream(
-        #     model=model,
-        #     max_tokens=max_tokens,
-        #     temperature=temperature,
-        #     messages=[{"role": "user", "content": prompt}]
-        # ) as stream:
-        #     async for text in stream.text_stream:
-        #         yield text
+                if retry_count < settings.MAX_RETRIES and is_retryable:
+                    retry_count += 1
+                    wait_time = retry_count * settings.RETRY_DELAY_SECONDS
+                    yield f"\n\n<!-- Retry {retry_count}/{settings.MAX_RETRIES + 1} after {wait_time}s... -->\n\n"
+                    await asyncio.sleep(wait_time)
+                else:
+                    # Non-retryable error or max retries reached
+                    raise
 
-        # Mock implementation
-        yield f"// Generated code from {model}\n"
-        yield f"// Prompt: {prompt}\n"
+        # Should not reach here, but just in case
+        if last_error:
+            raise last_error
 
-    async def _stream_openai(self, prompt: str, model: str, context: Optional[Dict],
-                            temperature: float, max_tokens: int) -> AsyncIterator[str]:
-        """Stream from OpenAI GPT"""
-        if not settings.OPENAI_API_KEY:
-            raise ValueError("OPENAI_API_KEY not configured")
+    async def _stream_response(
+        self,
+        model: str,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float,
+        max_tokens: int
+    ) -> AsyncGenerator[str, None]:
+        """
+        Stream response from OpenRouter.
 
-        # In production, use openai library
-        # from openai import AsyncOpenAI
-        # client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-        #
-        # stream = await client.chat.completions.create(
-        #     model=model,
-        #     messages=[{"role": "user", "content": prompt}],
-        #     temperature=temperature,
-        #     max_tokens=max_tokens,
-        #     stream=True
-        # )
-        #
-        # async for chunk in stream:
-        #     if chunk.choices[0].delta.content:
-        #         yield chunk.choices[0].delta.content
+        Args:
+            model: Model identifier (e.g., 'anthropic/claude-3-5-sonnet-20241022')
+            system_prompt: System instructions
+            user_prompt: User message
+            temperature: Sampling temperature
+            max_tokens: Maximum tokens
 
-        # Mock implementation
-        yield f"// Generated code from {model}\n"
+        Yields:
+            Text chunks from AI response
+        """
+        client = self._get_openrouter_client()
 
-    async def _stream_google(self, prompt: str, model: str, context: Optional[Dict],
-                           temperature: float, max_tokens: int) -> AsyncIterator[str]:
-        """Stream from Google Gemini"""
-        if not settings.GEMINI_API_KEY:
-            raise ValueError("GEMINI_API_KEY not configured")
+        # Stream using OpenAI-compatible API through OpenRouter
+        stream = await client.chat.completions.create(
+            model=model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            stream=True
+        )
 
-        yield f"// Generated code from {model}\n"
-
-    async def _stream_groq(self, prompt: str, model: str, context: Optional[Dict],
-                         temperature: float, max_tokens: int) -> AsyncIterator[str]:
-        """Stream from Groq"""
-        if not settings.GROQ_API_KEY:
-            raise ValueError("GROQ_API_KEY not configured")
-
-        yield f"// Generated code from {model}\n"
-
-    async def _stream_openrouter(self, prompt: str, model: str, context: Optional[Dict],
-                                temperature: float, max_tokens: int) -> AsyncIterator[str]:
-        """Stream from OpenRouter"""
-        if not settings.OPENROUTER_API_KEY:
-            raise ValueError("OPENROUTER_API_KEY not configured")
-
-        yield f"// Generated code from {model}\n"
+        async for chunk in stream:
+            if chunk.choices and chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
 
 
-# Global AI provider manager instance
-ai_provider = AIProviderManager()
+# Global AI provider instance
+ai_provider = AIProvider()

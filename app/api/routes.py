@@ -1,26 +1,63 @@
-"""
-API Routes
-Main router that includes all API endpoints
-"""
-from fastapi import APIRouter
+"""API routes configuration."""
 
+from fastapi import APIRouter
 from app.api.endpoints import (
     generate_ai_code,
     apply_ai_code,
+    conversation_state,
+    create_ai_sandbox_v2,
     install_packages,
-    detect_packages,
-    conversation,
-    sandbox,
-    create_zip
+    detect_and_install_packages,
+    get_sandbox_files,
+    kill_sandbox,
+    sandbox_status
 )
 
-router = APIRouter()
+# Create main API router
+api_router = APIRouter()
 
-# Include all endpoint routers
-router.include_router(generate_ai_code.router, tags=["AI Generation"])
-router.include_router(apply_ai_code.router, tags=["Code Application"])
-router.include_router(install_packages.router, tags=["Package Management"])
-router.include_router(detect_packages.router, tags=["Package Detection"])
-router.include_router(conversation.router, tags=["Conversation State"])
-router.include_router(sandbox.router, tags=["Sandbox Management"])
-router.include_router(create_zip.router, tags=["File Operations"])
+# Include endpoint routers
+api_router.include_router(
+    generate_ai_code.router,
+    tags=["Code Generation"]
+)
+
+api_router.include_router(
+    apply_ai_code.router,
+    tags=["Code Application"]
+)
+
+api_router.include_router(
+    conversation_state.router,
+    tags=["Conversation State"]
+)
+
+api_router.include_router(
+    create_ai_sandbox_v2.router,
+    tags=["Sandbox Management"]
+)
+
+api_router.include_router(
+    sandbox_status.router,
+    tags=["Sandbox Management"]
+)
+
+api_router.include_router(
+    get_sandbox_files.router,
+    tags=["Sandbox Management"]
+)
+
+api_router.include_router(
+    kill_sandbox.router,
+    tags=["Sandbox Management"]
+)
+
+api_router.include_router(
+    install_packages.router,
+    tags=["Package Management"]
+)
+
+api_router.include_router(
+    detect_and_install_packages.router,
+    tags=["Package Management"]
+)
