@@ -10,7 +10,9 @@ from app.api.endpoints import (
     detect_and_install_packages,
     get_sandbox_files,
     kill_sandbox,
-    sandbox_status
+    sandbox_status,
+    update_sandbox_session_time,
+    analyze_edit_intent
 )
 
 # Create main API router
@@ -60,4 +62,14 @@ api_router.include_router(
 api_router.include_router(
     detect_and_install_packages.router,
     tags=["Package Management"]
+)
+
+api_router.include_router(
+    update_sandbox_session_time.router,
+    tags=["Sandbox Management"]
+)
+
+api_router.include_router(
+    analyze_edit_intent.router,
+    tags=["AI Analysis"]
 )
