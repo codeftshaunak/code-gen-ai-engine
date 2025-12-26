@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     # CORS Configuration
     CORS_ORIGINS: str = "*"
 
+    # E2B Sandbox Configuration
+    E2B_API_KEY: Optional[str] = None
+
     # OpenRouter API Configuration (Only provider needed)
     OPENROUTER_API_KEY: Optional[str] = None
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
@@ -32,6 +35,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"  # Ignore extra fields in .env file
 
 
 # Global settings instance

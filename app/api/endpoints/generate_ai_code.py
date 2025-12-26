@@ -17,6 +17,7 @@ from app.core.ai_provider import ai_provider
 from app.core.prompt_builder import prompt_builder
 from app.utils.user_preferences import analyze_user_preferences
 from app.config.settings import settings
+from app.utils.project_state import project_state_manager
 
 
 router = APIRouter()
@@ -122,6 +123,22 @@ async def generate_ai_code_stream(
                         "message": "Initializing AI code generation..."
                     })
                 }
+
+                # Get existing files from project state
+                existing_files = project_state_manager.get_all_files(project_id)
+
+                # Merge with any files from request context
+                if request_data.context and request_data.context.current_files:
+                    # Merge request context files with existing files from state
+                    existing_files.update(request_data.context.current_files)
+
+                # Update request context with complete file list
+                if request_data.context:
+                    request_data.context.current_files = existing_files
+                else:
+                    # Create context if it doesn't exist
+                    from app.models.api_models import RequestContext
+                    request_data.context = RequestContext(current_files=existing_files)
 
                 # Build system prompt with conversation context
                 system_prompt = prompt_builder.build_system_prompt(

@@ -62,19 +62,11 @@ async def update_sandbox_session_time(
         #    - E2B: sandbox.setTimeout(timeout)
         #    - Vercel: sandbox.extendTimeout(timeout)
 
-        # Simulate provider check
-        provider_exists = False
+        # For now, accept all timeout updates (frontend manages E2B sandbox)
+        provider_type = "e2b"
 
-        if not provider_exists:
-            raise HTTPException(
-                status_code=404,
-                detail="No active sandbox provider found"
-            )
-
-        # For demonstration, simulate successful timeout update
-        provider_type = "local"
-
-        print(f"[update-sandbox-session-time] Timeout updated for project: {project_id}")
+        print(f"[update-sandbox-session-time] Timeout update request for project: {project_id}")
+        print(f"[update-sandbox-session-time] Requested timeout: {request.timeout} seconds")
 
         return {
             "success": True,
