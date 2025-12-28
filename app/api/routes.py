@@ -12,7 +12,9 @@ from app.api.endpoints import (
     kill_sandbox,
     sandbox_status,
     update_sandbox_session_time,
-    analyze_edit_intent
+    analyze_edit_intent,
+    generate_project_info,
+    test_stream
 )
 
 # Create main API router
@@ -72,4 +74,14 @@ api_router.include_router(
 api_router.include_router(
     analyze_edit_intent.router,
     tags=["AI Analysis"]
+)
+
+api_router.include_router(
+    generate_project_info.router,
+    tags=["AI Analysis"]
+)
+
+api_router.include_router(
+    test_stream.router,
+    tags=["Testing"]
 )

@@ -1,6 +1,7 @@
 """Generate AI code streaming endpoint."""
 
 import json
+import logging
 import time
 from typing import AsyncGenerator
 from fastapi import APIRouter, HTTPException, Request, Header
@@ -19,6 +20,9 @@ from app.utils.user_preferences import analyze_user_preferences
 from app.config.settings import settings
 from app.utils.project_state import project_state_manager
 
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -160,28 +164,46 @@ async def generate_ai_code_stream(
 
                 # Stream AI response
                 generated_code = ""
-                async for chunk in ai_provider.stream_with_retry(
-                    model=model,
-                    system_prompt=system_prompt,
-                    user_prompt=request_data.prompt
-                ):
-                    # Accumulate generated code and response
-                    generated_code += chunk
-                    assistant_response += chunk
+                chunk_count = 0
 
-                    # Send stream event
+                try:
+                    async for chunk in ai_provider.stream_with_retry(
+                        model=model,
+                        system_prompt=system_prompt,
+                        user_prompt=request_data.prompt
+                    ):
+                        # Accumulate generated code and response
+                        generated_code += chunk
+                        assistant_response += chunk
+                        chunk_count += 1
+
+                        # Send stream event
+                        yield {
+                            "event": "message",
+                            "data": json.dumps({
+                                "type": "stream",
+                                "text": chunk,
+                                "raw": True
+                            })
+                        }
+
+                        # Send keepalive to prevent timeout (every 500 chars)
+                        if len(generated_code) % 500 == 0:
+                            yield {"event": "ping", "data": ""}
+
+                    # Log successful streaming
+                    logger.info(f"Streaming completed: {chunk_count} chunks, {len(generated_code)} chars")
+
+                except Exception as stream_error:
+                    logger.error(f"Streaming error: {str(stream_error)}", exc_info=True)
                     yield {
                         "event": "message",
                         "data": json.dumps({
-                            "type": "stream",
-                            "text": chunk,
-                            "raw": True
+                            "type": "error",
+                            "error": f"Streaming failed: {str(stream_error)}"
                         })
                     }
-
-                    # Send keepalive to prevent timeout
-                    if len(generated_code) % 500 == 0:  # Every ~500 characters
-                        yield {"event": "ping", "data": ""}
+                    raise
 
                 # Parse generated code for files and packages
                 files_generated = generated_code.count("<file path=")
@@ -255,18 +277,20 @@ async def generate_ai_code_stream(
                     })
                 }
 
-        # Return SSE response
+        # Return SSE response with proper headers
         return EventSourceResponse(
             event_generator(),
             media_type="text/event-stream",
             headers={
-                "Cache-Control": "no-cache",
+                "Cache-Control": "no-cache, no-store, must-revalidate",
                 "Connection": "keep-alive",
-                "X-Accel-Buffering": "no",
+                "X-Accel-Buffering": "no",  # Disable nginx buffering
+                "Content-Encoding": "none",  # Prevent compression
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-                "Access-Control-Allow-Headers": "Content-Type, Authorization"
-            }
+                "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Project-Id"
+            },
+            ping=15  # Send ping every 15 seconds to keep connection alive
         )
 
     except ValueError as ve:

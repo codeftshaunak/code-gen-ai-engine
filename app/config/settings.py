@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     # Default AI Model Configuration
     DEFAULT_AI_MODEL: str = "anthropic/claude-3-5-sonnet-20241022"
     DEFAULT_TEMPERATURE: float = 0.7
-    MAX_TOKENS: int = 8192
+    MAX_TOKENS: int = 32000  # Increased to allow detailed, polished, modern UI generation with advanced features
 
     # Retry Configuration
     MAX_RETRIES: int = 2

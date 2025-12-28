@@ -121,9 +121,16 @@ class AIProvider:
             stream=True
         )
 
-        async for chunk in stream:
-            if chunk.choices and chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
+        try:
+            async for chunk in stream:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+        except Exception as e:
+            # Log the streaming error
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Stream iteration error: {str(e)}", exc_info=True)
+            raise
 
 
 # Global AI provider instance
