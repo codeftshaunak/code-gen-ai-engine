@@ -43,10 +43,10 @@ async def create_modal_sandbox_with_vite(project_id: str = "default") -> dict:
     import modal
 
     # Create or lookup Modal app
-    app = modal.App.lookup("sandbox-app", create_if_missing=True)
+    app = modal.App.lookup(project_id, create_if_missing=True)
 
     # Create a volume for persistent file storage (one per project)
-    volume_name = f"sandbox-volume-{project_id}"
+    volume_name = f"{project_id}"
     volume = modal.Volume.from_name(volume_name, create_if_missing=True)
 
     # Create Modal sandbox with custom image that includes Node.js and npm
