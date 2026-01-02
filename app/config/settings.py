@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     # E2B Sandbox Configuration
     E2B_API_KEY: Optional[str] = None
 
+    # Modal Sandbox Configuration
+    MODAL_API_KEY: Optional[str] = None
+
     # OpenRouter API Configuration (Only provider needed)
     OPENROUTER_API_KEY: Optional[str] = None
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"

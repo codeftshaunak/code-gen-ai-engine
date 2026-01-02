@@ -2,13 +2,14 @@
 
 from fastapi import APIRouter
 from app.api.endpoints import (
+    create_sandbox_v1,
     generate_ai_code,
     apply_ai_code,
     conversation_state,
     create_ai_sandbox_v2,
     install_packages,
     detect_and_install_packages,
-    get_sandbox_files,
+    get_sandbox_files_v1,
     kill_sandbox,
     sandbox_status,
     update_sandbox_session_time,
@@ -42,12 +43,17 @@ api_router.include_router(
 )
 
 api_router.include_router(
+    create_sandbox_v1.router,
+    tags=["Sandbox Management"]
+)
+
+api_router.include_router(
     sandbox_status.router,
     tags=["Sandbox Management"]
 )
 
 api_router.include_router(
-    get_sandbox_files.router,
+    get_sandbox_files_v1.router,
     tags=["Sandbox Management"]
 )
 
