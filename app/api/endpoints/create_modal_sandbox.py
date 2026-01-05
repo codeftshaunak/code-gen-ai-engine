@@ -59,17 +59,8 @@ async def create_modal_sandbox_with_vite(project_id: str = "default") -> dict:
     # Create sandbox with timeout of 10 minutes (600 seconds)
     print(f"[Modal] Creating sandbox for project: {project_id}")
 
-    # Check and terminate any existing sandbox for this project
-    try:
-        existing_sandbox = modal.Sandbox.from_name(MODAL_APP_NAME, project_id)
-        if existing_sandbox:
-            print(f"[Modal] Found existing sandbox: {existing_sandbox.object_id}")
-            existing_sandbox.terminate()
-            print(f"[Modal] Terminated existing sandbox for project: {project_id}")
-            # Wait for termination to complete
-            await asyncio.sleep(2)
-    except Exception as e:
-        print(f"[Modal] No existing sandbox found or unable to terminate: {e}")
+    # Note: This function should only be called when no active sandbox exists
+    # The endpoint already checks for existing sandboxes before calling this function
 
     # Create new sandbox
     sandbox = modal.Sandbox.create(
@@ -396,7 +387,7 @@ async def create_sandbox(
     try:
         project_id = x_project_id or "default"
 
-        print(f"[create-sandbox] Creating Modal sandbox for project: {project_id}")
+        print(f"[create-sandbox] Checking for existing sandbox for project: {project_id}")
 
         # Check if Modal API key is configured
         if not settings.MODAL_API_KEY:
@@ -409,7 +400,78 @@ async def create_sandbox(
                 }
             )
 
-        # Create Modal sandbox with Vite app
+        # Set Modal API key as environment variable
+        os.environ["MODAL_TOKEN_ID"] = settings.MODAL_API_KEY.split(":")[0] if settings.MODAL_API_KEY and ":" in settings.MODAL_API_KEY else settings.MODAL_API_KEY or ""
+        os.environ["MODAL_TOKEN_SECRET"] = settings.MODAL_API_KEY.split(":")[1] if settings.MODAL_API_KEY and ":" in settings.MODAL_API_KEY else ""
+
+        # Always check Modal service directly for existing active sandbox
+        print(f"[create-sandbox] Querying Modal service for active sandbox...")
+        existing_sandbox = None
+        should_create_new = False
+
+        try:
+            # Lookup sandbox by name from Modal service
+            existing_sandbox = modal.Sandbox.from_name(MODAL_APP_NAME, project_id)
+
+            if existing_sandbox is not None:
+                print(f"[create-sandbox] Found sandbox in Modal: {existing_sandbox.object_id}")
+
+                # Verify the sandbox is actually running by checking its tunnels
+                # This communicates directly with Modal service to verify active state
+                try:
+                    tunnels = existing_sandbox.tunnels()
+
+                    if tunnels and 5173 in tunnels:
+                        existing_url = tunnels[5173].url
+                        sandbox_id = existing_sandbox.object_id
+
+                        print(f"[create-sandbox] Sandbox is active with tunnel URL: {existing_url}")
+
+                        # Store in memory for other endpoints to access
+                        volume_name = f"{project_id}"
+                        try:
+                            volume = modal.Volume.from_name(volume_name, create_if_missing=False)
+                        except:
+                            volume = modal.Volume.from_name(volume_name, create_if_missing=True)
+
+                        _sandboxes[project_id] = {
+                            "sandbox": existing_sandbox,
+                            "volume": volume,
+                            "volume_name": volume_name,
+                            "sandbox_id": sandbox_id
+                        }
+
+                        return {
+                            "success": True,
+                            "projectId": project_id,
+                            "sandboxId": sandbox_id,
+                            "url": existing_url,
+                            "provider": "modal",
+                            "message": "Active sandbox already exists"
+                        }
+                    else:
+                        print(f"[create-sandbox] Sandbox exists but no active tunnels found, will create new sandbox")
+                        should_create_new = True
+                except Exception as e:
+                    print(f"[create-sandbox] Could not get tunnels for existing sandbox: {e}, will create new sandbox")
+                    should_create_new = True
+            else:
+                print(f"[create-sandbox] from_name returned None, no existing sandbox")
+                should_create_new = True
+
+        except Exception as e:
+            error_msg = str(e).lower()
+            # If sandbox is not found, that's expected - we'll create a new one
+            if "not found" in error_msg or "does not exist" in error_msg:
+                print(f"[create-sandbox] No existing sandbox found in Modal service (expected)")
+                should_create_new = True
+            else:
+                # Other errors (auth, network, etc.) should be raised
+                print(f"[create-sandbox] Error checking for existing sandbox: {e}")
+                raise
+
+        # No active sandbox exists, create a new one
+        print(f"[create-sandbox] Creating new Modal sandbox for project: {project_id}")
         print(f"[create-sandbox] Creating sandbox with Vite app...")
         result = await create_modal_sandbox_with_vite(project_id)
 
