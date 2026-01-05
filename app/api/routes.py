@@ -2,13 +2,15 @@
 
 from fastapi import APIRouter
 from app.api.endpoints import (
+    create_modal_sandbox,
     generate_ai_code,
     apply_ai_code,
+    apply_ai_code_modal,
     conversation_state,
     create_ai_sandbox_v2,
+    get_modal_sandbox_files,
     install_packages,
     detect_and_install_packages,
-    get_sandbox_files,
     kill_sandbox,
     sandbox_status,
     update_sandbox_session_time,
@@ -32,6 +34,11 @@ api_router.include_router(
 )
 
 api_router.include_router(
+    apply_ai_code_modal.router,
+    tags=["Code Application"]
+)
+
+api_router.include_router(
     conversation_state.router,
     tags=["Conversation State"]
 )
@@ -42,12 +49,17 @@ api_router.include_router(
 )
 
 api_router.include_router(
+    create_modal_sandbox.router,
+    tags=["Sandbox Management"]
+)
+
+api_router.include_router(
     sandbox_status.router,
     tags=["Sandbox Management"]
 )
 
 api_router.include_router(
-    get_sandbox_files.router,
+    get_modal_sandbox_files.router,
     tags=["Sandbox Management"]
 )
 
