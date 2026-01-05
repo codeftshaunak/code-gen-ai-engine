@@ -5,6 +5,7 @@ from app.api.endpoints import (
     create_modal_sandbox,
     generate_ai_code,
     apply_ai_code,
+    apply_ai_code_modal,
     conversation_state,
     create_ai_sandbox_v2,
     get_modal_sandbox_files,
@@ -29,6 +30,11 @@ api_router.include_router(
 
 api_router.include_router(
     apply_ai_code.router,
+    tags=["Code Application"]
+)
+
+api_router.include_router(
+    apply_ai_code_modal.router,
     tags=["Code Application"]
 )
 

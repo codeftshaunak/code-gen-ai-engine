@@ -3,6 +3,7 @@
 __all__ = [
     "generate_ai_code",
     "apply_ai_code",
+    "apply_ai_code_modal",
     "conversation_state",
     "create_ai_sandbox_v2",
     "create_sandbox_v1",
