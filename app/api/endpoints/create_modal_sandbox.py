@@ -7,9 +7,13 @@ from app.config.settings import settings
 import asyncio
 import os
 import modal
+import logging
 
 # Import project state manager for tracking files
 from app.utils.project_state import project_state_manager
+
+# Suppress hpack debug logs
+logging.getLogger('hpack.hpack').setLevel(logging.WARNING)
 
 # Global sandbox storage shared across endpoints (keyed by project_id)
 _sandboxes: Dict[str, Dict[str, any]] = {}
@@ -55,8 +59,22 @@ async def create_modal_sandbox_with_vite(project_id: str = "default") -> dict:
     # Create sandbox with timeout of 10 minutes (600 seconds)
     print(f"[Modal] Creating sandbox for project: {project_id}")
 
+    # Check and terminate any existing sandbox for this project
+    try:
+        existing_sandbox = modal.Sandbox.from_name(MODAL_APP_NAME, project_id)
+        if existing_sandbox:
+            print(f"[Modal] Found existing sandbox: {existing_sandbox.object_id}")
+            existing_sandbox.terminate()
+            print(f"[Modal] Terminated existing sandbox for project: {project_id}")
+            # Wait for termination to complete
+            await asyncio.sleep(2)
+    except Exception as e:
+        print(f"[Modal] No existing sandbox found or unable to terminate: {e}")
+
+    # Create new sandbox
     sandbox = modal.Sandbox.create(
         app=modal_app,
+        name=project_id,
         image=VITE_IMAGE,
         timeout=6000,
         workdir="/home/user/app",
