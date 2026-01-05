@@ -6,6 +6,7 @@ from typing import Optional, Dict
 from app.config.settings import settings
 import asyncio
 import os
+import modal
 
 # Import project state manager for tracking files
 from app.utils.project_state import project_state_manager
@@ -32,6 +33,10 @@ class SandboxResponse(BaseModel):
     details: Optional[str] = None
 
 
+MODAL_APP_NAME = "vite-preview-platform"
+
+VITE_IMAGE = modal.Image.from_registry("node:20-slim")
+
 async def create_modal_sandbox_with_vite(project_id: str = "default") -> dict:
     """Create Modal sandbox and setup Vite React app using SDK."""
 
@@ -39,32 +44,20 @@ async def create_modal_sandbox_with_vite(project_id: str = "default") -> dict:
     os.environ["MODAL_TOKEN_ID"] = settings.MODAL_API_KEY.split(":")[0] if settings.MODAL_API_KEY and ":" in settings.MODAL_API_KEY else settings.MODAL_API_KEY or ""
     os.environ["MODAL_TOKEN_SECRET"] = settings.MODAL_API_KEY.split(":")[1] if settings.MODAL_API_KEY and ":" in settings.MODAL_API_KEY else ""
 
-    # Import modal after setting environment variables
-    import modal
-
     # Create or lookup Modal app
-    app = modal.App.lookup(project_id, create_if_missing=True)
+    modal_app = modal.App.lookup(MODAL_APP_NAME, create_if_missing=True)
 
     # Create a volume for persistent file storage (one per project)
     volume_name = f"{project_id}"
     volume = modal.Volume.from_name(volume_name, create_if_missing=True)
 
-    # Create Modal sandbox with custom image that includes Node.js and npm
-    image = (
-        modal.Image.debian_slim()
-        .apt_install("curl", "procps")  # Add curl and procps for debugging
-        .run_commands(
-            "curl -fsSL https://deb.nodesource.com/setup_20.x | bash -",
-            "apt-get install -y nodejs",
-        )
-    )
 
     # Create sandbox with timeout of 10 minutes (600 seconds)
     print(f"[Modal] Creating sandbox for project: {project_id}")
 
     sandbox = modal.Sandbox.create(
-        image=image,
-        app=app,
+        app=modal_app,
+        image=VITE_IMAGE,
         timeout=6000,
         workdir="/home/user/app",
         volumes={
