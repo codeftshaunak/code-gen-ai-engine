@@ -138,7 +138,7 @@ def normalize_file_path(path: str) -> str:
     return path
 
 
-@router.post("/apply-ai-code-modal-stream")
+@router.post("/apply-ai-code-stream-modal")
 async def apply_ai_code_modal_stream(
     request_data: ApplyCodeRequest,
     x_project_id: str = Header(default="default", alias="X-Project-Id")

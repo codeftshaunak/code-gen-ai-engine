@@ -7,7 +7,7 @@ import os
 
 router = APIRouter()
 
-@router.get("/get-sandbox-files-v1")
+@router.get("/get-sandbox-files-modal")
 async def get_sandbox_file(
     file_path: Optional[str] = None,
     x_project_id: str = Header(default="default", alias="X-Project-Id")

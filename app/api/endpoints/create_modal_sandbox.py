@@ -360,7 +360,7 @@ body {
     }
 
 
-@router.post("/create-sandbox-v1")
+@router.post("/create-sandbox-modal")
 async def create_sandbox(
     x_project_id: str = Header(default="default", alias="X-Project-Id")
 ):
