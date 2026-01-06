@@ -1,6 +1,8 @@
 """Kill sandbox endpoint."""
 
 from fastapi import APIRouter, HTTPException, Header
+from app.api.endpoints.create_ai_sandbox_v2 import _sandboxes
+from app.utils.project_state import project_state_manager
 
 
 router = APIRouter()
@@ -43,13 +45,23 @@ async def kill_sandbox(
 
         print(f"[kill-sandbox] Stopping sandbox for project: {project_id}")
 
-        # In a real implementation, this would:
-        # 1. Get the sandbox provider for the project
-        # 2. Terminate the sandbox container/VM
-        # 3. Clean up project state
-        # 4. Release resources
+        # Get the sandbox instance for the project
+        sandbox = _sandboxes.get(project_id)
 
-        # Simulate cleanup
+        # Terminate the sandbox if it exists
+        if sandbox:
+            try:
+                sandbox.kill()
+                print(f"[kill-sandbox] Sandbox terminated for project: {project_id}")
+            except Exception as sandbox_error:
+                print(f"[kill-sandbox] Warning: Failed to terminate sandbox: {sandbox_error}")
+
+            # Remove from global storage
+            del _sandboxes[project_id]
+
+        # Clean up project state
+        project_state_manager.clear_project(project_id)
+
         print(f"[kill-sandbox] Sandbox stopped and state cleaned up successfully for project: {project_id}")
 
         return {
