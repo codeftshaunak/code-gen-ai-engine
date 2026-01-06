@@ -62,12 +62,16 @@ async def create_modal_sandbox_with_vite(project_id: str = "default") -> dict:
     # Note: This function should only be called when no active sandbox exists
     # The endpoint already checks for existing sandboxes before calling this function
 
+    timeout_seconds = 60 * 60  # 60 minutes
+    idle_timeout_seconds = 20 * 60  # 20 minutes idle timeout
+
     # Create new sandbox
     sandbox = modal.Sandbox.create(
         app=modal_app,
         name=project_id,
         image=VITE_IMAGE,
-        timeout=6000,
+        timeout= timeout_seconds,
+        idle_timeout= idle_timeout_seconds,
         workdir="/home/user/app",
         volumes={
             "/home/user/app": volume,  # Mount volume for entire app directory for persistence
