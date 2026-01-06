@@ -9,6 +9,7 @@ from app.api.endpoints import (
     conversation_state,
     create_ai_sandbox_v2,
     get_modal_sandbox_files,
+    get_sandbox_files,
     install_packages,
     detect_and_install_packages,
     kill_sandbox,
@@ -60,6 +61,11 @@ api_router.include_router(
 
 api_router.include_router(
     get_modal_sandbox_files.router,
+    tags=["Sandbox Management"]
+)
+
+api_router.include_router(
+    get_sandbox_files.router,
     tags=["Sandbox Management"]
 )
 

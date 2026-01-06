@@ -9,6 +9,7 @@ __all__ = [
     "create_sandbox_v1",
     "install_packages",
     "detect_and_install_packages",
+    "get_sandbox_files",
     "get_sandbox_files_v1",
     "kill_sandbox",
     "sandbox_status",
