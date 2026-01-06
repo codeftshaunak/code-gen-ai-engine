@@ -16,7 +16,8 @@ from app.api.endpoints import (
     update_sandbox_session_time,
     analyze_edit_intent,
     generate_project_info,
-    test_stream
+    test_stream,
+    run_command_modal,
 )
 
 # Create main API router
@@ -96,4 +97,9 @@ api_router.include_router(
 api_router.include_router(
     test_stream.router,
     tags=["Testing"]
+)
+
+api_router.include_router(
+    run_command_modal.router,
+    tags=["Sandbox Management"]
 )
