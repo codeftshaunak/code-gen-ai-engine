@@ -16,4 +16,5 @@ __all__ = [
     "analyze_edit_intent",
     "generate_project_info",
     "test_stream",
+    "run_command_modal",
 ]
