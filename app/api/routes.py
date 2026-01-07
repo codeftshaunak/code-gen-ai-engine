@@ -11,6 +11,7 @@ from app.api.endpoints import (
     get_modal_sandbox_files,
     get_sandbox_files,
     install_packages,
+    install_packages_modal,
     detect_and_install_packages,
     kill_sandbox,
     kill_sandbox_modal,
@@ -82,6 +83,11 @@ api_router.include_router(
 
 api_router.include_router(
     install_packages.router,
+    tags=["Package Management"]
+)
+
+api_router.include_router(
+    install_packages_modal.router,
     tags=["Package Management"]
 )
 
