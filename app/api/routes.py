@@ -13,6 +13,7 @@ from app.api.endpoints import (
     install_packages,
     detect_and_install_packages,
     kill_sandbox,
+    kill_sandbox_modal,
     sandbox_status,
     update_sandbox_session_time,
     analyze_edit_intent,
@@ -71,6 +72,11 @@ api_router.include_router(
 
 api_router.include_router(
     kill_sandbox.router,
+    tags=["Sandbox Management"]
+)
+
+api_router.include_router(
+    kill_sandbox_modal.router,
     tags=["Sandbox Management"]
 )
 

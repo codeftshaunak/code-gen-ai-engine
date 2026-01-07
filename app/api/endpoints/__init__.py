@@ -12,6 +12,7 @@ __all__ = [
     "get_sandbox_files",
     "get_sandbox_files_v1",
     "kill_sandbox",
+    "kill_sandbox_modal",
     "sandbox_status",
     "update_sandbox_session_time",
     "analyze_edit_intent",
