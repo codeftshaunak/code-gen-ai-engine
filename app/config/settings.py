@@ -31,6 +31,12 @@ class Settings(BaseSettings):
     DEFAULT_TEMPERATURE: float = 0.7
     MAX_TOKENS: int = 32000  # Increased to allow detailed, polished, modern UI generation with advanced features
 
+    # Supabase Configuration
+    SUPABASE_ACCESS_TOKEN: Optional[str] = None
+    SUPABASE_API_BASE_URL: str = "https://api.supabase.com/v1"
+    SUPABASE_DEFAULT_REGION: str = "us-east-1"
+    SUPABASE_DEFAULT_PLAN: str = "free"
+
     # Retry Configuration
     MAX_RETRIES: int = 2
     RETRY_DELAY_SECONDS: int = 2

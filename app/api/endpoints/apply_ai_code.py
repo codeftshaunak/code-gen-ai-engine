@@ -120,10 +120,11 @@ def normalize_file_path(path: str) -> str:
     if path.startswith('/'):
         path = path[1:]
 
-    # Config files that shouldn't have src/ prefix
+    # Config files and env files that shouldn't have src/ prefix
     config_files = [
         'tailwind.config.js', 'vite.config.js', 'package.json',
-        'package-lock.json', 'tsconfig.json', 'postcss.config.js'
+        'package-lock.json', 'tsconfig.json', 'postcss.config.js',
+        '.env', '.env.local', '.env.development', '.env.production'
     ]
 
     filename = path.split('/')[-1]
