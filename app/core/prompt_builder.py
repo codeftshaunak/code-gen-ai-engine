@@ -52,7 +52,7 @@ class PromptBuilder:
 
         # Edit mode instructions
         if is_edit:
-            sections.append(PromptBuilder._get_edit_mode_instructions())
+            sections.append(PromptBuilder._get_edit_mode_instructions(is_fullstack))
 
         # File context if available
         if context and context.current_files:
@@ -247,9 +247,9 @@ THIS IS A FULL-STACK PROJECT - Generate both frontend AND backend code with Supa
 """
 
     @staticmethod
-    def _get_edit_mode_instructions() -> str:
+    def _get_edit_mode_instructions(is_fullstack: bool = False) -> str:
         """Get instructions for edit mode."""
-        return """## CRITICAL: EDIT MODE ACTIVE
+        base_instructions = """## CRITICAL: EDIT MODE ACTIVE
 
 THIS IS AN EDIT TO AN EXISTING APPLICATION - FOLLOW THESE RULES:
 
@@ -267,6 +267,36 @@ THIS IS AN EDIT TO AN EXISTING APPLICATION - FOLLOW THESE RULES:
    - Preserve all existing code that isn't being changed
    - Don't remove features that aren't mentioned
    - Keep the same file structure unless explicitly asked to change it"""
+        
+        # Add SQL migration instructions for fullstack projects
+        if is_fullstack:
+            base_instructions += """
+
+## DATABASE CHANGES IN EDIT MODE:
+
+If this edit requires NEW DATABASE TABLES or SCHEMA CHANGES:
+1. ALWAYS generate SQL migrations using <sql-migration file="..."> tags
+2. Use descriptive migration filenames with timestamps (e.g., "20260110_create_faqs_table.sql")
+3. Include CREATE TABLE statements with proper columns and constraints
+4. Add Row Level Security (RLS) policies for the new tables
+5. Example:
+   <sql-migration file="20260110_create_faqs_table.sql">
+   CREATE TABLE IF NOT EXISTS public.faqs (
+     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+     question TEXT NOT NULL,
+     answer TEXT NOT NULL,
+     created_at TIMESTAMPTZ DEFAULT NOW()
+   );
+   
+   ALTER TABLE public.faqs ENABLE ROW LEVEL SECURITY;
+   CREATE POLICY "Enable read access for all users" ON public.faqs FOR SELECT USING (true);
+   CREATE POLICY "Enable insert for all users" ON public.faqs FOR INSERT WITH CHECK (true);
+   </sql-migration>
+
+6. Update the frontend code to use the new table with Supabase client
+7. The SQL will be automatically executed and saved to src/supabase/migrations/"""
+        
+        return base_instructions
 
     @staticmethod
     def _get_critical_rules() -> str:
