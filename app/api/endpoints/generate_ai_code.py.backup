@@ -7,7 +7,7 @@ from typing import AsyncGenerator
 from fastapi import APIRouter, HTTPException, Request, Header
 from sse_starlette.sse import EventSourceResponse
 
-from app.models.api_models import GenerateCodeRequest, StreamEvent, ErrorResponse, SupabaseProjectInfo
+from app.models.api_models import GenerateCodeRequest, StreamEvent, ErrorResponse
 from app.models.conversation import (
     conversation_manager,
     ConversationMessage,
@@ -19,9 +19,6 @@ from app.core.prompt_builder import prompt_builder
 from app.utils.user_preferences import analyze_user_preferences
 from app.config.settings import settings
 from app.utils.project_state import project_state_manager
-from app.utils.supabase_provisioner import supabase_provisioner
-from app.utils.project_type_detector import detect_project_type
-from app.utils.code_parser import extract_sql_migrations
 
 
 # Initialize logger
@@ -117,27 +114,9 @@ async def generate_ai_code_stream(
         # Get model (use default if not specified)
         model = request_data.model or settings.DEFAULT_AI_MODEL
 
-        # Detect project type if not explicitly specified
-        is_fullstack = request_data.is_fullstack
-        supabase_config = None
-        
-        if not is_fullstack and not request_data.is_edit:
-            # Auto-detect project type for new projects
-            try:
-                detection_result = await detect_project_type(request_data.prompt)
-                is_fullstack = detection_result.get("type") == "fullstack"
-                
-                if is_fullstack:
-                    logger.info(f"Detected full-stack project: {detection_result.get('reasoning')}")
-            except Exception as e:
-                logger.error(f"Project type detection failed: {str(e)}")
-                # Default to frontend-only on error
-                is_fullstack = False
-
         # Create event generator
         async def event_generator() -> AsyncGenerator[dict, None]:
             """Generate SSE events for code generation."""
-            nonlocal is_fullstack, supabase_config
             assistant_response = ""
             try:
                 # Send initial status
@@ -148,83 +127,6 @@ async def generate_ai_code_stream(
                         "message": "Initializing AI code generation..."
                     })
                 }
-
-                # Provision Supabase project if full-stack
-                if is_fullstack and not supabase_config:
-                    try:
-                        yield {
-                            "event": "message",
-                            "data": json.dumps({
-                                "type": "status",
-                                "message": "Setting up Supabase backend..."
-                            })
-                        }
-
-                        # Get organization
-                        orgs = await supabase_provisioner.get_organizations()
-                        if not orgs:
-                            raise Exception("No Supabase organizations found")
-                        
-                        org_id = orgs[0].get("id")
-                        logger.info(f"Using Supabase organization: {org_id}")
-
-                        yield {
-                            "event": "message",
-                            "data": json.dumps({
-                                "type": "status",
-                                "message": "Creating Supabase project..."
-                            })
-                        }
-
-                        # Create project (use sanitized prompt as name)
-                        project_name = f"upfounder-{project_id}"
-                        supabase_project = await supabase_provisioner.create_project(
-                            org_id=org_id,
-                            name=project_name
-                        )
-
-                        project_ref = supabase_project.get("id") or supabase_project.get("ref")
-                        logger.info(f"Created Supabase project: {project_ref}")
-
-                        yield {
-                            "event": "message",
-                            "data": json.dumps({
-                                "type": "status",
-                                "message": "Retrieving Supabase API keys..."
-                            })
-                        }
-
-                        # Get API keys
-                        keys = await supabase_provisioner.get_api_keys(project_ref)
-                        
-                        supabase_config = {
-                            "project_id": project_ref,
-                            "api_url": f"https://{project_ref}.supabase.co",
-                            "anon_key": keys.get("anon") or keys.get("publishable", ""),
-                            "publishable_key": keys.get("publishable") or keys.get("anon", "")
-                        }
-
-                        yield {
-                            "event": "message",
-                            "data": json.dumps({
-                                "type": "supabase_setup",
-                                "message": f"Supabase project created: {project_ref}",
-                                "supabaseConfig": supabase_config
-                            })
-                        }
-
-                    except Exception as supabase_error:
-                        logger.error(f"Supabase provisioning failed: {str(supabase_error)}")
-                        yield {
-                            "event": "message",
-                            "data": json.dumps({
-                                "type": "warning",
-                                "message": f"Supabase setup failed: {str(supabase_error)}. Continuing with frontend-only."
-                            })
-                        }
-                        # Fall back to frontend-only
-                        is_fullstack = False
-                        supabase_config = None
 
                 # Get existing files from project state
                 existing_files = project_state_manager.get_all_files(project_id)
@@ -248,9 +150,7 @@ async def generate_ai_code_stream(
                     is_edit=request_data.is_edit,
                     context=request_data.context,
                     conversation_state=conversation_state,
-                    user_preferences=user_preferences,
-                    is_fullstack=is_fullstack,
-                    supabase_config=supabase_config
+                    user_preferences=user_preferences
                 )
 
                 # Send status update
@@ -308,51 +208,6 @@ async def generate_ai_code_stream(
                 # Parse generated code for files and packages
                 files_generated = generated_code.count("<file path=")
                 packages = _extract_packages(generated_code)
-                
-                # Execute SQL migrations if full-stack
-                sql_migrations = []
-                if is_fullstack and supabase_config:
-                    try:
-                        sql_migrations = extract_sql_migrations(generated_code)
-                        
-                        if sql_migrations:
-                            yield {
-                                "event": "message",
-                                "data": json.dumps({
-                                    "type": "status",
-                                    "message": f"📊 Executing {len(sql_migrations)} SQL migration(s)..."
-                                })
-                            }
-                            
-                            for migration in sql_migrations:
-                                try:
-                                    result = await supabase_provisioner.execute_sql(
-                                        project_id=supabase_config["project_id"],
-                                        sql_query=migration["content"]
-                                    )
-                                    
-                                    yield {
-                                        "event": "message",
-                                        "data": json.dumps({
-                                            "type": "status",
-                                            "message": f"Executed migration: {migration['filename']}"
-                                        })
-                                    }
-                                except Exception as sql_error:
-                                    logger.error(f"SQL migration failed: {str(sql_error)}")
-                                    yield {
-                                        "event": "message",
-                                        "data": json.dumps({
-                                            "type": "warning",
-                                            "message": f"Migration {migration['filename']} failed: {str(sql_error)}"
-                                        })
-                                    }
-                    except Exception as e:
-                        logger.error(f"SQL migration extraction failed: {str(e)}")
-                
-                # Add @supabase/supabase-js if full-stack
-                if is_fullstack and "@supabase/supabase-js" not in packages:
-                    packages.append("@supabase/supabase-js")
 
                 # Record this interaction in conversation state
                 assistant_message = ConversationMessage(
@@ -387,25 +242,17 @@ async def generate_ai_code_stream(
                 conversation_manager.update(project_id, conversation_state)
 
                 # Send completion event
-                completion_data = {
-                    "type": "complete",
-                    "generatedCode": generated_code,
-                    "explanation": "Code generated successfully!",
-                    "files": files_generated,
-                    "model": model,
-                    "packagesToInstall": packages,
-                    "warnings": []
-                }
-                
-                # Add Supabase info if full-stack
-                if is_fullstack and supabase_config:
-                    completion_data["supabaseConfig"] = supabase_config
-                    completion_data["sqlMigrations"] = len(sql_migrations)
-                    completion_data["isFullstack"] = True
-                
                 yield {
                     "event": "message",
-                    "data": json.dumps(completion_data)
+                    "data": json.dumps({
+                        "type": "complete",
+                        "generatedCode": generated_code,
+                        "explanation": "Code generated successfully!",
+                        "files": files_generated,
+                        "model": model,
+                        "packagesToInstall": packages,
+                        "warnings": []
+                    })
                 }
 
             except HTTPException as he:

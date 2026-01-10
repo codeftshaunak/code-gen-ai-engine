@@ -28,6 +28,15 @@ class RequestContext(BaseModel):
     conversation_context: Optional[ConversationContext] = Field(None, alias="conversationContext")
 
 
+class SupabaseProjectInfo(BaseModel):
+    """Supabase project information."""
+
+    project_id: str = Field(..., alias="projectId")
+    api_url: str = Field(..., alias="apiUrl")
+    anon_key: str = Field(..., alias="anonKey")
+    publishable_key: Optional[str] = Field(None, alias="publishableKey")
+
+
 class GenerateCodeRequest(BaseModel):
     """Request model for generate-ai-code-stream endpoint."""
 
@@ -35,6 +44,8 @@ class GenerateCodeRequest(BaseModel):
     model: Optional[str] = Field(None, description="AI model to use (e.g., 'anthropic/claude-4.5-sonnet')")
     context: Optional[RequestContext] = Field(None, description="Current application context")
     is_edit: bool = Field(False, alias="isEdit", description="Whether this is an edit or new generation")
+    is_fullstack: bool = Field(False, alias="isFullstack", description="Whether to generate full-stack with Supabase backend")
+    supabase_config: Optional[SupabaseProjectInfo] = Field(None, alias="supabaseConfig", description="Supabase project configuration")
 
 
 class StreamEvent(BaseModel):

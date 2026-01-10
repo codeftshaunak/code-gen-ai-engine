@@ -3,6 +3,8 @@
 import json
 import logging
 import re
+import asyncio
+import time
 from typing import AsyncGenerator, Dict, Set, List
 from fastapi import APIRouter, HTTPException, Header
 from sse_starlette.sse import EventSourceResponse
@@ -120,10 +122,11 @@ def normalize_file_path(path: str) -> str:
     if path.startswith('/'):
         path = path[1:]
 
-    # Config files that shouldn't have src/ prefix
+    # Config files and env files that shouldn't have src/ prefix
     config_files = [
         'tailwind.config.js', 'vite.config.js', 'package.json',
-        'package-lock.json', 'tsconfig.json', 'postcss.config.js'
+        'package-lock.json', 'tsconfig.json', 'postcss.config.js',
+        '.env', '.env.local', '.env.development', '.env.production'
     ]
 
     filename = path.split('/')[-1]
@@ -136,6 +139,7 @@ def normalize_file_path(path: str) -> str:
         path = f'src/{path}'
 
     return path
+
 
 
 @router.post("/apply-ai-code-stream")
@@ -177,6 +181,9 @@ async def apply_ai_code_stream(
                     'commandsExecuted': [],
                     'errors': []
                 }
+                
+                # Track if Vite has been restarted to avoid multiple restarts
+                vite_restarted = False
 
                 # Send start event
                 yield {
@@ -352,6 +359,87 @@ print('✓ Written: {full_path}')
 
                             # Track file in project state
                             project_state_manager.add_file(project_id, normalized_path, content)
+                            
+                            # If this is a .env file, restart Vite to reload environment variables
+                            if normalized_path.endswith(('.env', '.env.local', '.env.development', '.env.production')):
+                                # CRITICAL: Restart Vite dev server to reload environment variables
+                                # Vite only reads .env files at startup, not dynamically
+                                if not vite_restarted:
+                                    logger.info(f"[apply-ai-code-stream] Restarting Vite dev server to load new environment variables...")
+                                    
+                                    yield {
+                                        "event": "message",
+                                        "data": json.dumps({
+                                            "type": "status",
+                                            "message": "Restarting dev server to load environment variables..."
+                                        })
+                                    }
+                                    
+                                    try:
+                                        # Kill existing Vite process
+                                        kill_result = sandbox.run_code("""
+import subprocess
+import time
+
+# Kill Vite process
+result = subprocess.run(['pkill', '-f', 'vite'], capture_output=True)
+print('Killed Vite process')
+
+# Wait for process to terminate
+time.sleep(1)
+""")
+                                        
+                                        logger.info("[apply-ai-code-stream] Killed existing Vite process")
+                                        
+                                        # Restart Vite dev server
+                                        restart_result = sandbox.run_code("""
+import subprocess
+import os
+import time
+
+os.chdir('/home/user/app')
+
+# Start Vite dev server with fresh environment
+env = os.environ.copy()
+env['FORCE_COLOR'] = '0'
+
+process = subprocess.Popen(
+    ['npm', 'run', 'dev'],
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    env=env
+)
+
+print(f'Vite dev server restarted with PID: {process.pid}')
+time.sleep(1)
+""")
+                                        
+                                        logger.info("[apply-ai-code-stream] Restarted Vite dev server")
+                                        
+                                        # Wait for Vite to be ready
+                                        await asyncio.sleep(3)
+                                        
+                                        vite_restarted = True
+                                        
+                                        yield {
+                                            "event": "message",
+                                            "data": json.dumps({
+                                                "type": "status",
+                                                "message": "Dev server restarted successfully! Environment variables loaded."
+                                            })
+                                        }
+                                        
+                                        logger.info("[apply-ai-code-stream] Vite dev server ready with new environment variables")
+                                        
+                                    except Exception as restart_error:
+                                        logger.error(f"[apply-ai-code-stream] Error restarting dev server: {restart_error}")
+                                        yield {
+                                            "event": "message",
+                                            "data": json.dumps({
+                                                "type": "warning",
+                                                "message": f"Warning: Dev server restart - {str(restart_error)}"
+                                            })
+                                        }
 
                             yield {
                                 "event": "message",
@@ -398,6 +486,7 @@ print('✓ Written: {full_path}')
                                 })
                             }
 
+                            # Execute command
                             result = sandbox.run_code(f"""
 import subprocess
 result = subprocess.run(
@@ -409,6 +498,9 @@ print(result.stdout)
 if result.stderr:
     print(result.stderr)
 """)
+                            
+                            logger.info(f"[apply-ai-code-stream] Command executed: {cmd}")
+                            logger.info(f"[apply-ai-code-stream] Output: {result.logs.stdout}")
 
                             results['commandsExecuted'].append(cmd)
 

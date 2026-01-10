@@ -120,10 +120,11 @@ def normalize_file_path(path: str) -> str:
     if path.startswith('/'):
         path = path[1:]
 
-    # Config files that shouldn't have src/ prefix
+    # Config files and env files that shouldn't have src/ prefix
     config_files = [
         'tailwind.config.js', 'vite.config.js', 'package.json',
-        'package-lock.json', 'tsconfig.json', 'postcss.config.js'
+        'package-lock.json', 'tsconfig.json', 'postcss.config.js',
+        '.env', '.env.local', '.env.development', '.env.production'
     ]
 
     filename = path.split('/')[-1]
@@ -198,6 +199,9 @@ async def apply_ai_code_modal_stream(
                     'commandsExecuted': [],
                     'errors': []
                 }
+                
+                # Track if Vite has been restarted to avoid multiple restarts
+                vite_restarted = False
 
                 # Send start event
                 yield {
@@ -375,6 +379,65 @@ async def apply_ai_code_modal_stream(
 
                             # Track file in project state
                             project_state_manager.add_file(project_id, normalized_path, content)
+                            
+                            # If this is a .env file, restart Vite to reload environment variables
+                            if normalized_path.endswith(('.env', '.env.local', '.env.development', '.env.production')):
+                                if not vite_restarted:
+                                    logger.info(f"[apply-ai-code-modal] Restarting Vite dev server to load new environment variables...")
+                                    
+                                    yield {
+                                        "event": "message",
+                                        "data": json.dumps({
+                                            "type": "status",
+                                            "message": "Restarting dev server to load environment variables..."
+                                        })
+                                    }
+                                    
+                                    try:
+                                        # Kill existing Vite process
+                                        kill_process = sandbox.exec("bash", "-c", "pkill -f vite", timeout=10)
+                                        kill_process.wait()
+                                        
+                                        logger.info("[apply-ai-code-modal] Killed existing Vite process")
+                                        
+                                        # Wait for process to terminate
+                                        import time
+                                        time.sleep(1)
+                                        
+                                        # Restart Vite dev server
+                                        restart_process = sandbox.exec(
+                                            "bash", "-c",
+                                            "cd /home/user/app && npm run dev",
+                                            timeout=60
+                                        )
+                                        
+                                        logger.info("[apply-ai-code-modal] Restarted Vite dev server")
+                                        
+                                        # Wait for Vite to be ready
+                                        import asyncio
+                                        await asyncio.sleep(3)
+                                        
+                                        vite_restarted = True
+                                        
+                                        yield {
+                                            "event": "message",
+                                            "data": json.dumps({
+                                                "type": "status",
+                                                "message": "Dev server restarted successfully! Environment variables loaded."
+                                            })
+                                        }
+                                        
+                                        logger.info("[apply-ai-code-modal] Vite dev server ready with new environment variables")
+                                        
+                                    except Exception as restart_error:
+                                        logger.error(f"[apply-ai-code-modal] Error restarting dev server: {restart_error}")
+                                        yield {
+                                            "event": "message",
+                                            "data": json.dumps({
+                                                "type": "warning",
+                                                "message": f"Warning: Dev server restart - {str(restart_error)}"
+                                            })
+                                        }
 
                             yield {
                                 "event": "message",

@@ -14,7 +14,9 @@ class PromptBuilder:
         is_edit: bool = False,
         context: Optional[RequestContext] = None,
         conversation_state: Optional[ConversationState] = None,
-        user_preferences: Optional[UserPreferences] = None
+        user_preferences: Optional[UserPreferences] = None,
+        is_fullstack: bool = False,
+        supabase_config: Optional[Dict] = None
     ) -> str:
         """
         Build comprehensive system prompt for code generation.
@@ -25,6 +27,8 @@ class PromptBuilder:
             context: Application context (files, conversation history, etc.)
             conversation_state: Full conversation state with message history
             user_preferences: Analyzed user preferences
+            is_fullstack: Whether this is a full-stack project with Supabase
+            supabase_config: Supabase configuration (project_id, api_url, keys)
 
         Returns:
             Complete system prompt string
@@ -33,6 +37,10 @@ class PromptBuilder:
 
         # Core identity and role
         sections.append(PromptBuilder._get_core_identity())
+
+        # Supabase backend instructions (if fullstack)
+        if is_fullstack and supabase_config:
+            sections.append(PromptBuilder._get_supabase_backend_instructions(supabase_config))
 
         # Conversation history context
         if conversation_state:
@@ -58,7 +66,7 @@ class PromptBuilder:
             sections.append(PromptBuilder._get_multipage_architecture())
 
         # Code structure format
-        sections.append(PromptBuilder._get_code_format_instructions())
+        sections.append(PromptBuilder._get_code_format_instructions(is_fullstack))
 
         # Advanced features and components
         sections.append(PromptBuilder._get_advanced_features())
@@ -95,7 +103,7 @@ Your role is to help users build STUNNING, ADVANCED web applications by:
 - Default to dark/modern aesthetic unless user requests otherwise
 - Use contemporary design trends: glassmorphism, neumorphism, gradient accents, smooth transitions
 
-**🚨 CRITICAL FUNDAMENTAL RULES - THESE ARE YOUR TOP 2 PRIORITIES:**
+**[CRITICAL] CRITICAL FUNDAMENTAL RULES - THESE ARE YOUR TOP 2 PRIORITIES:**
 
 **RULE #1: EVERY file you import MUST be generated.**
 - If App.jsx imports 5 components, you MUST create all 5 files
@@ -103,7 +111,7 @@ Your role is to help users build STUNNING, ADVANCED web applications by:
 
 **RULE #2: EVERY component file MUST start with `export default function`**
 - FIRST LINE of every .jsx file: `export default function ComponentName() {`
-- NOT: `function ComponentName() {` ← This will CRASH the app
+- NOT: `function ComponentName() {` <- This will CRASH the app
 - Every page file (HomePage.jsx, CartPage.jsx, etc.) MUST begin with `export default function`
 - This is NOT optional - it's MANDATORY for every single component file
 
@@ -116,7 +124,7 @@ export default function HomePage() {
 
 **Example of WRONG component file (will crash):**
 ```jsx
-function HomePage() {  // ❌ Missing export default - app will crash
+function HomePage() {  // [ERROR] Missing export default - app will crash
   return <div>Content</div>;
 }
 ```
@@ -132,7 +140,7 @@ function HomePage() {  // ❌ Missing export default - app will crash
   ```
 - NEVER end your response until ALL imports have corresponding files
 
-**⚠️ CRITICAL: EVERY COMPONENT MUST START WITH `export default function` ⚠️**
+**[WARNING] CRITICAL: EVERY COMPONENT MUST START WITH `export default function` [WARNING]**
 
 **This is the #1 error you make. Every .jsx file MUST begin with:**
 ```jsx
@@ -141,7 +149,7 @@ export default function ComponentName() {
 
 **Not this (WRONG):**
 ```jsx
-function ComponentName() {  // ❌ Missing export default
+function ComponentName() {  // [ERROR] Missing export default
 ```
 
 **EXECUTION ORDER - YOU MUST FOLLOW THIS EXACT SEQUENCE:**
@@ -165,10 +173,78 @@ Example workflow:
 - Generate src/pages/HomePage.jsx (SECOND IMPORT - don't skip)
 - Generate src/pages/CartPage.jsx (THIRD IMPORT - don't skip)
 - Generate src/pages/CheckoutPage.jsx (FOURTH IMPORT - don't skip)
-- Verify: 4 imports = 4 files ✓
+- Verify: 4 imports = 4 files OK
 - Now generate: index.css, other utilities, etc.
 
 **CRITICAL: Go through imports TOP TO BOTTOM and generate files IN THAT EXACT ORDER**"""
+
+    @staticmethod
+    def _get_supabase_backend_instructions(supabase_config: Dict) -> str:
+        """Get Supabase backend generation instructions for full-stack projects."""
+        project_id = supabase_config.get("project_id", "YOUR_PROJECT_ID")
+        api_url = supabase_config.get("api_url", f"https://{project_id}.supabase.co")
+        anon_key = supabase_config.get("anon_key", "YOUR_ANON_KEY")
+        
+        return f"""## FULL-STACK MODE: SUPABASE BACKEND INTEGRATION
+
+THIS IS A FULL-STACK PROJECT - Generate both frontend AND backend code with Supabase integration.
+
+### SUPABASE PROJECT CONFIGURATION:
+- Project ID: {project_id}
+- API URL: {api_url}
+- Anon Key: {anon_key}
+
+### BACKEND REQUIREMENTS:
+
+1. **Supabase Client Setup (MANDATORY)**
+   Create src/lib/supabase.js (JavaScript, NOT TypeScript) with Supabase client initialization.
+   Example:
+   ```javascript
+   import {{ createClient }} from '@supabase/supabase-js';
+   
+   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+   const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+   
+   if (!supabaseUrl || !supabaseKey) {{
+     throw new Error('Missing Supabase environment variables');
+   }}
+   
+   export const supabase = createClient(supabaseUrl, supabaseKey);
+   ```
+
+2. **Database Schema (SQL Migrations)**
+   Generate SQL migration files using <sql-migration file="filename.sql"> tags.
+   Include CREATE TABLE, Row Level Security policies, and indexes.
+
+3. **Authentication Hooks (JavaScript, NOT TypeScript)**
+   Create src/hooks/useAuth.js for user authentication with signUp, signIn, signOut.
+   Use JavaScript (.js), NOT TypeScript (.ts).
+
+4. **Data Hooks for CRUD Operations (JavaScript, NOT TypeScript)**
+   Create src/hooks/useEntity.js for each database entity.
+   Implement fetch, create, update, delete operations.
+   Use JavaScript (.js), NOT TypeScript (.ts).
+   Example: usePosts.js, useTodos.js, etc.
+
+5. **Environment Configuration**
+   Generate .env.local file at PROJECT ROOT (same level as package.json, NOT inside src/ folder) with:
+   VITE_SUPABASE_URL={api_url}
+   VITE_SUPABASE_PROJECT_ID={project_id}
+   VITE_SUPABASE_PUBLISHABLE_KEY={anon_key}
+   
+   [CRITICAL] File must be at root level, same folder as package.json, index.html, vite.config.js
+   [ERROR] Do NOT put .env.local inside src/ - this causes "Missing Supabase environment variables" error
+
+### CRITICAL BACKEND RULES:
+- ALWAYS create SQL migrations for database tables
+- ALWAYS implement Row Level Security policies
+- ALWAYS create hooks for data operations
+- ALWAYS use JavaScript (.js) files, NOT TypeScript (.ts)
+- [ERROR] Do NOT create types/ folder - this is a JavaScript project
+- [ERROR] Do NOT create .ts files - use .js instead
+- ALWAYS handle errors gracefully
+- ALWAYS connect frontend to backend using the hooks
+"""
 
     @staticmethod
     def _get_edit_mode_instructions() -> str:
@@ -200,19 +276,19 @@ THIS IS AN EDIT TO AN EXISTING APPLICATION - FOLLOW THESE RULES:
 0. **NEVER CREATE OR MODIFY CONFIGURATION FILES**
 
    **DO NOT create or modify these files - they are pre-configured:**
-   - ❌ package.json (already exists with all dependencies)
-   - ❌ vite.config.js (already configured)
-   - ❌ tailwind.config.js (already configured)
-   - ❌ postcss.config.js (already configured)
-   - ❌ tsconfig.json (already configured)
-   - ❌ .eslintrc, .prettierrc, or any other config files
+   - [ERROR] package.json (already exists with all dependencies)
+   - [ERROR] vite.config.js (already configured)
+   - [ERROR] tailwind.config.js (already configured)
+   - [ERROR] postcss.config.js (already configured)
+   - [ERROR] tsconfig.json (already configured)
+   - [ERROR] .eslintrc, .prettierrc, or any other config files
 
    **ONLY generate application code:**
-   - ✅ src/App.jsx
-   - ✅ src/pages/*.jsx
-   - ✅ src/components/*.jsx
-   - ✅ src/index.css (if needed)
-   - ✅ Other source files in src/ directory
+   - [OK] src/App.jsx
+   - [OK] src/pages/*.jsx
+   - [OK] src/components/*.jsx
+   - [OK] src/index.css (if needed)
+   - [OK] Other source files in src/ directory
 
    **If you need a new package (e.g., react-router-dom, lucide-react):**
    - Simply import and use it in your code
@@ -231,21 +307,21 @@ THIS IS AN EDIT TO AN EXISTING APPLICATION - FOLLOW THESE RULES:
 
    Step 1: After writing App.jsx, LIST all imports:
    ```
-   import HomePage from "./pages/HomePage"       → Need HomePage.jsx
-   import CartPage from "./pages/CartPage"       → Need CartPage.jsx
-   import CheckoutPage from "./pages/CheckoutPage" → Need CheckoutPage.jsx
-   import Layout from "./components/Layout"      → Need Layout.jsx
+   import HomePage from "./pages/HomePage"       -> Need HomePage.jsx
+   import CartPage from "./pages/CartPage"       -> Need CartPage.jsx
+   import CheckoutPage from "./pages/CheckoutPage" -> Need CheckoutPage.jsx
+   import Layout from "./components/Layout"      -> Need Layout.jsx
    ```
 
    Step 2: COUNT the imports: 4 files needed
 
    Step 3: GENERATE all 4 files:
-   - Create src/pages/HomePage.jsx ✓
-   - Create src/pages/CartPage.jsx ✓
-   - Create src/pages/CheckoutPage.jsx ✓
-   - Create src/components/Layout.jsx ✓
+   - Create src/pages/HomePage.jsx OK
+   - Create src/pages/CartPage.jsx OK
+   - Create src/pages/CheckoutPage.jsx OK
+   - Create src/components/Layout.jsx OK
 
-   Step 4: VERIFY count matches: 4 imports = 4 files ✓
+   Step 4: VERIFY count matches: 4 imports = 4 files OK
 
    **IF COUNTS DON'T MATCH, YOU MUST GENERATE THE MISSING FILES IMMEDIATELY**
 
@@ -289,7 +365,7 @@ THIS IS AN EDIT TO AN EXISTING APPLICATION - FOLLOW THESE RULES:
         """Get multipage application architecture instructions."""
         return """## MULTIPAGE APPLICATION ARCHITECTURE
 
-**⚠️⚠️⚠️ CRITICAL: EVERY PAGE FILE MUST HAVE `export default function` AT THE START ⚠️⚠️⚠️**
+**[WARNING][WARNING][WARNING] CRITICAL: EVERY PAGE FILE MUST HAVE `export default function` AT THE START [WARNING][WARNING][WARNING]**
 
 **CORRECT page file structure:**
 ```jsx
@@ -300,14 +376,14 @@ export default function HomePage() {
 
 **WRONG - Will cause crash:**
 ```jsx
-function HomePage() {  // ❌ Missing export default
+function HomePage() {  // [ERROR] Missing export default
   return <div>Content here</div>;
 }
 ```
 
 **DEFAULT BEHAVIOR: Always create multipage applications with routing unless explicitly told to create a single page or it's a landing page or marketing website etc.**
 
-**⚠️ CRITICAL WARNING - READ THIS CAREFULLY:**
+**[WARNING] CRITICAL WARNING - READ THIS CAREFULLY:**
 If you import a page in App.jsx but DON'T create the file, the application will CRASH with:
 ```
 Failed to resolve import "./pages/CheckoutPage" from "src/App.jsx"
@@ -404,8 +480,8 @@ This is the MOST COMMON ERROR. You MUST generate EVERY file you import. NO EXCEP
 ### Important Rules (CRITICAL - MUST FOLLOW):
 
 1. **GENERATE ALL IMPORTED PAGES - NEVER LEAVE IMPORTS MISSING**
-   - If App.jsx imports HomePage, FeaturesPage, ContactPage → YOU MUST CREATE ALL THREE FILES
-   - If Layout.jsx has Links to /about, /services, /contact → YOU MUST CREATE AboutPage, ServicesPage, ContactPage
+   - If App.jsx imports HomePage, FeaturesPage, ContactPage -> YOU MUST CREATE ALL THREE FILES
+   - If Layout.jsx has Links to /about, /services, /contact -> YOU MUST CREATE AboutPage, ServicesPage, ContactPage
    - EVERY import statement MUST have a corresponding file generated
    - EVERY route defined in App.jsx MUST have its page component created
    - Missing imports = broken application - THIS IS NOT ACCEPTABLE
@@ -416,19 +492,19 @@ This is the MOST COMMON ERROR. You MUST generate EVERY file you import. NO EXCEP
 5. **Organize pages** in `src/pages/` directory
 6. **Use descriptive page names**: HomePage, AboutPage, ContactPage (not Home, About, Contact)
 7. **Implement nested routes** using <Outlet /> in Layout component
-8. **Create logical pages** based on user request context (landing page → Home, About, Contact, Services)
+8. **Create logical pages** based on user request context (landing page -> Home, About, Contact, Services)
 9. **NO FILE COUNT LIMITS** - Create as many pages as the application needs (3 pages, 5 pages, 10 pages - all acceptable)
 
 ### Example User Requests:
 
 **"Create a landing page for a SaaS product"**
-→ Create: HomePage, FeaturesPage, PricingPage, ContactPage with Layout navigation
+-> Create: HomePage, FeaturesPage, PricingPage, ContactPage with Layout navigation
 
 **"Build a portfolio website"**
-→ Create: HomePage, ProjectsPage, AboutPage, ContactPage with Layout navigation
+-> Create: HomePage, ProjectsPage, AboutPage, ContactPage with Layout navigation
 
 **"Make a dashboard application"**
-→ Create: DashboardPage, AnalyticsPage, SettingsPage, ProfilePage with Layout navigation
+-> Create: DashboardPage, AnalyticsPage, SettingsPage, ProfilePage with Layout navigation
 
 ### When NOT to Create Multipage:
 
@@ -437,7 +513,7 @@ This is the MOST COMMON ERROR. You MUST generate EVERY file you import. NO EXCEP
 - User is making an edit to existing code (isEdit=true)
 - User requests a specific single component or feature
 
-### ❌ WRONG EXAMPLE - THIS WILL CRASH:
+### [ERROR] WRONG EXAMPLE - THIS WILL CRASH:
 
 ```jsx
 <file path="src/App.jsx">
@@ -460,11 +536,11 @@ export default function App() {
 export default function HomePage() { ... }
 </file>
 
-// ❌ ERROR: CartPage.jsx and CheckoutPage.jsx are MISSING!
+// [ERROR] ERROR: CartPage.jsx and CheckoutPage.jsx are MISSING!
 // Application will crash with: "Failed to resolve import ./pages/CartPage"
 ```
 
-### ❌ WRONG EXAMPLE #2 - MISSING EXPORT DEFAULT:
+### [ERROR] WRONG EXAMPLE #2 - MISSING EXPORT DEFAULT:
 
 ```jsx
 <file path="src/App.jsx">
@@ -475,16 +551,16 @@ export default function App() {
 </file>
 
 <file path="src/pages/HomePage.jsx">
-function HomePage() {  // ❌ MISSING export default!
+function HomePage() {  // [ERROR] MISSING export default!
   return <div>Home</div>;
 }
 </file>
 
-// ❌ ERROR: Missing export default
+// [ERROR] ERROR: Missing export default
 // Application will crash with: "does not provide an export named 'default'"
 ```
 
-### ✅ CORRECT EXAMPLE - THIS WORKS:
+### [OK] CORRECT EXAMPLE - THIS WORKS:
 
 ```jsx
 <file path="src/App.jsx">
@@ -515,30 +591,30 @@ export default function CartPage() { ... }
 export default function CheckoutPage() { ... }
 </file>
 
-// ✅ CORRECT: All 3 imported pages are generated!
+// [OK] CORRECT: All 3 imported pages are generated!
 ```
 
 **Count Check:**
 - Imports in App.jsx: 3 (HomePage, CartPage, CheckoutPage)
 - Files generated: 3 (HomePage.jsx, CartPage.jsx, CheckoutPage.jsx)
-- ✅ MATCH - Application will work!
+- [OK] MATCH - Application will work!
 
 ### VERIFICATION CHECKLIST (Before completing your response):
 
 Before you finish generating code, verify:
-✓ **All imports in App.jsx have corresponding files**
-  - Check every `import HomePage from './pages/HomePage'` → HomePage.jsx MUST exist
-  - Check every `import Layout from './components/Layout'` → Layout.jsx MUST exist
+OK **All imports in App.jsx have corresponding files**
+  - Check every `import HomePage from './pages/HomePage'` -> HomePage.jsx MUST exist
+  - Check every `import Layout from './components/Layout'` -> Layout.jsx MUST exist
 
-✓ **All routes in App.jsx have corresponding page files**
-  - Check every `<Route path="/about" element={<AboutPage />} />` → AboutPage.jsx MUST exist
+OK **All routes in App.jsx have corresponding page files**
+  - Check every `<Route path="/about" element={<AboutPage />} />` -> AboutPage.jsx MUST exist
   - Count your routes, count your page files - numbers MUST match
 
-✓ **All Links in Layout have corresponding pages**
-  - Check every `<Link to="/contact">` → ContactPage.jsx MUST exist
+OK **All Links in Layout have corresponding pages**
+  - Check every `<Link to="/contact">` -> ContactPage.jsx MUST exist
   - If navigation has 5 links, you need 5 page files
 
-✓ **Navigation links match routes in App.jsx**
+OK **Navigation links match routes in App.jsx**
   - If Layout has `<Link to="/services">`, App.jsx MUST have `<Route path="services" element={<ServicesPage />} />`
 
 **Example Verification:**
@@ -546,13 +622,13 @@ Before you finish generating code, verify:
 App.jsx imports: HomePage, AboutPage, ServicesPage, ContactPage, Layout
 App.jsx routes: /, /about, /services, /contact
 Files generated:
-  ✓ src/App.jsx
-  ✓ src/components/Layout.jsx
-  ✓ src/pages/HomePage.jsx
-  ✓ src/pages/AboutPage.jsx
-  ✓ src/pages/ServicesPage.jsx
-  ✓ src/pages/ContactPage.jsx
-Result: ALL IMPORTS SATISFIED ✓
+  OK src/App.jsx
+  OK src/components/Layout.jsx
+  OK src/pages/HomePage.jsx
+  OK src/pages/AboutPage.jsx
+  OK src/pages/ServicesPage.jsx
+  OK src/pages/ContactPage.jsx
+Result: ALL IMPORTS SATISFIED OK
 ```
 
 **If verification fails, you MUST generate the missing files before completing your response.**
@@ -586,7 +662,7 @@ STEP 5: Generate index.css and any other files
 
 **WHY THIS ORDER MATTERS:**
 If you generate App.jsx, then Layout, then some pages, you WILL forget the remaining pages.
-Generate App.jsx → IMMEDIATELY ALL pages → then everything else.
+Generate App.jsx -> IMMEDIATELY ALL pages -> then everything else.
 This is not optional - this is the REQUIRED sequence."""
 
     @staticmethod
@@ -594,7 +670,7 @@ This is not optional - this is the REQUIRED sequence."""
         """Get advanced features and component patterns."""
         return """## ADVANCED FEATURES & COMPONENTS - Build Premium Experiences
 
-**⚠️ REMINDER: ALL examples below are JSX snippets. When you create actual component files, you MUST wrap them with `export default function ComponentName() { ... }`**
+**[WARNING] REMINDER: ALL examples below are JSX snippets. When you create actual component files, you MUST wrap them with `export default function ComponentName() { ... }`**
 
 **IMPORTANT: Don't just build basic pages. Add ADVANCED, POLISHED features to every application.**
 
@@ -856,9 +932,9 @@ Add loading indicators and skeleton screens:
 **REMEMBER: Every page should feel like a premium product. Don't settle for basic - aim for IMPRESSIVE.**"""
 
     @staticmethod
-    def _get_code_format_instructions() -> str:
+    def _get_code_format_instructions(is_fullstack: bool = False) -> str:
         """Get code format instructions."""
-        return """## CODE OUTPUT FORMAT
+        base_format = """## CODE OUTPUT FORMAT
 
 **CRITICAL: ONLY GENERATE SOURCE CODE FILES**
 - Generate ONLY files in the src/ directory (App.jsx, components, pages, etc.)
@@ -866,141 +942,74 @@ Add loading indicators and skeleton screens:
 - These config files already exist and are pre-configured
 - Focus on application code only
 
+**CRITICAL: .env.local FILE PLACEMENT**
+- .env.local MUST be at PROJECT ROOT level
+- Same folder as: package.json, index.html, vite.config.js, README.md
+- [OK] <file path=".env.local"> -> Creates at root
+- [ERROR] <file path="src/.env.local"> -> Wrong! Inside src/
+- [ERROR] <file path="home/.env.local"> -> Wrong! Inside home/
+- If .env.local is inside src/, it will NOT be found by Vite, causing "Missing Supabase environment variables" error"""
+
+        if is_fullstack:
+            base_format += """
+
+**FULL-STACK CODE FORMAT ADDITIONS:**
+
+For backend files, also use these formats:
+
+1. SQL Migrations (for database schema):
+<sql-migration file="001_create_todos_table.sql">
+CREATE TABLE IF NOT EXISTS todos (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title TEXT NOT NULL,
+  completed BOOLEAN DEFAULT false,
+  user_id UUID REFERENCES auth.users(id),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE todos ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage own todos" ON todos
+  FOR ALL USING (auth.uid() = user_id);
+</sql-migration>
+
+2. Environment Variables (CRITICAL: At PROJECT ROOT level, same folder as package.json - NOT inside src/):
+
+**[CRITICAL] The .env.local file MUST BE at project root, NOT inside src/ folder**
+
+Location: .env.local (same level as package.json, index.html, vite.config.js)
+
+WRONG LOCATIONS (will cause errors):
+- src/.env.local [ERROR] - Inside src folder
+- src/app/.env.local [ERROR] - Deep inside src
+- home/.env.local [ERROR] - Inside home folder
+
+CORRECT LOCATION:
+- .env.local at root level
+
+File content:
+```
+VITE_SUPABASE_URL=https://yourproject.supabase.co
+VITE_SUPABASE_PROJECT_ID=yourproject
+VITE_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+```
+
+When creating the file in response, use:
+<file path=".env.local">
+VITE_SUPABASE_URL=https://yourproject.supabase.co
+VITE_SUPABASE_PROJECT_ID=yourproject
+VITE_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+</file>
+
+This creates .env.local at PROJECT ROOT, not inside src/"""
+
+        base_format += """
+
 **MANDATORY TEMPLATE FOR MULTIPAGE APPS - COPY THIS PATTERN EXACTLY:**
 
-**🔴 CRITICAL RULE: When you generate page files, the FIRST LINE must be `export default function PageName() {`**
-**Copy the exact structure from the examples below. Do NOT write functions without `export default`.**
-
-When generating a multipage app, your response MUST follow this template structure:
-
-```
-I will create an e-commerce app with 4 pages: HomePage, ProductsPage, CartPage, CheckoutPage.
-
-<file path="src/App.jsx">
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import HomePage from './pages/HomePage';
-import ProductsPage from './pages/ProductsPage';
-import CartPage from './pages/CartPage';
-import CheckoutPage from './pages/CheckoutPage';
-// ... rest of App.jsx
-</file>
-
-Now I will generate ALL 4 imported pages immediately:
-
-**⚠️ CRITICAL: THE VERY FIRST LINE OF EVERY PAGE FILE MUST START WITH `export default function`**
-
-<file path="src/pages/HomePage.jsx">
-export default function HomePage() {
-  return (
-    <div className="min-h-screen bg-slate-950 p-8">
-      <h1 className="text-5xl font-bold text-slate-100">Home Page</h1>
-      {/* Add your page content here */}
-    </div>
-  );
-}
-</file>
-
-<file path="src/pages/ProductsPage.jsx">
-export default function ProductsPage() {
-  return (
-    <div className="min-h-screen bg-slate-950 p-8">
-      <h1 className="text-5xl font-bold text-slate-100">Products Page</h1>
-      {/* Add your page content here */}
-    </div>
-  );
-}
-</file>
-
-<file path="src/pages/CartPage.jsx">
-export default function CartPage() {
-  return (
-    <div className="min-h-screen bg-slate-950 p-8">
-      <h1 className="text-5xl font-bold text-slate-100">Cart Page</h1>
-      {/* Add your page content here */}
-    </div>
-  );
-}
-</file>
-
-<file path="src/pages/CheckoutPage.jsx">
-export default function CheckoutPage() {
-  return (
-    <div className="min-h-screen bg-slate-950 p-8">
-      <h1 className="text-5xl font-bold text-slate-100">Checkout Page</h1>
-      {/* Add your page content here */}
-    </div>
-  );
-}
-</file>
-
-Verification: 4 imports in App.jsx = 4 page files generated ✓
-
-Now generating remaining files:
-
-<file path="src/components/Layout.jsx">
-export default function Layout() {
-  // complete code with navigation and <Outlet />
-}
-</file>
-```
-
-**⚠️⚠️⚠️ CRITICAL REQUIREMENTS - READ CAREFULLY:**
-
-1. **EVERY PAGE FILE MUST START WITH `export default function`**
-   - HomePage.jsx → `export default function HomePage() {`
-   - CartPage.jsx → `export default function CartPage() {`
-   - Layout.jsx → `export default function Layout() {`
-
-2. **NO EXCEPTIONS - If you forget `export default`, the app will crash!**
-
-**THIS TEMPLATE IS MANDATORY - DO NOT SKIP ANY PAGES**
-
----
-
-You must wrap all code files in the following XML-style format:
-
-```
-<file path="src/components/Hero.jsx">
-// ⚠️ CRITICAL: Notice the 'export default' - this is MANDATORY for every component file
-
-export default function Hero() {
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 to-slate-900">
-      <h1 className="text-5xl md:text-7xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
-        Hello World
-      </h1>
-    </div>
-  );
-}
-</file>
-```
-
-**Format Rules:**
-1. Each file MUST have opening `<file path="...">` and closing `</file>` tags
-2. Path must be relative to project root (e.g., "src/App.jsx", "src/components/Button.jsx")
-3. Include complete file content between tags - no truncation
-4. Multiple files should each have their own file tags
-5. Do not include explanatory text inside file tags - only code
-6. **CRITICAL**: Every component file MUST have `export default` - this is MANDATORY
-
-**Before each file, you can optionally include:**
-- A brief explanation of what the file does
-- Why you're creating or modifying it
-- Important implementation notes
-
-**Example:**
-
-I'll create a hero section component with a dark background and centered text.
-
-<file path="src/components/Hero.jsx">
-[Complete component code]
-</file>
-
-Now I'll update App.jsx to use this component.
-
-<file path="src/App.jsx">
-[Complete App code with Hero imported and used]
-</file>"""
+**[RED] CRITICAL RULE: When you generate page files, the FIRST LINE must be `export default function PageName() {`**"""
+        
+        return base_format
 
     @staticmethod
     def _get_styling_rules() -> str:
@@ -1024,7 +1033,7 @@ Now I'll update App.jsx to use this component.
    2. **Text Color** (grayscale shades)
    3. **Accent Color** (1 color only - used sparingly)
 
-   **✅ CORRECT - Professional 3-Color Palette:**
+   **[OK] CORRECT - Professional 3-Color Palette:**
 
    **Dark Theme (Recommended):**
    ```
@@ -1051,33 +1060,33 @@ Now I'll update App.jsx to use this component.
    3. Accent: blue (500, 600, 700) - ONE accent color
    ```
 
-   **❌ WRONG - Too Many Colors (Unprofessional):**
+   **[ERROR] WRONG - Too Many Colors (Unprofessional):**
    ```
-   ❌ Using blue AND purple AND green AND cyan together
-   ❌ bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600
-   ❌ Different accent colors on same page (blue buttons, purple links, green badges)
+   [ERROR] Using blue AND purple AND green AND cyan together
+   [ERROR] bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600
+   [ERROR] Different accent colors on same page (blue buttons, purple links, green badges)
    ```
 
    **Stick to ONE accent color family throughout the ENTIRE website:**
-   - ✅ All blue: `blue-400`, `blue-500`, `blue-600`
-   - ✅ All violet: `violet-400`, `violet-500`, `violet-600`
-   - ✅ All emerald: `emerald-400`, `emerald-500`, `emerald-600`
-   - ❌ DON'T MIX: blue + purple + green in same app
+   - [OK] All blue: `blue-400`, `blue-500`, `blue-600`
+   - [OK] All violet: `violet-400`, `violet-500`, `violet-600`
+   - [OK] All emerald: `emerald-400`, `emerald-500`, `emerald-600`
+   - [ERROR] DON'T MIX: blue + purple + green in same app
 
 3. **ADVANCED VISUAL EFFECTS - Professional & Cohesive**
 
    **Gradients (Use SAME COLOR family only - maintain 3-color rule):**
 
-   **✅ CORRECT - Single Accent Color Gradients:**
+   **[OK] CORRECT - Single Accent Color Gradients:**
    - Hero background: `bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950`
    - Buttons: `bg-gradient-to-r from-blue-600 to-blue-500` (shades of blue only)
    - Cards: `bg-gradient-to-br from-slate-900 to-slate-800` (shades of slate only)
    - Text gradient: `bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent` (blue only)
 
-   **❌ WRONG - Multi-Color Gradients (breaks 3-color rule):**
-   - ❌ `from-blue-600 via-violet-600 to-purple-600` (3 different accent colors!)
-   - ❌ `from-blue-600 to-cyan-600` (mixing blue and cyan)
-   - ❌ `from-purple-400 to-pink-400` (unless pink/purple is your ONE accent)
+   **[ERROR] WRONG - Multi-Color Gradients (breaks 3-color rule):**
+   - [ERROR] `from-blue-600 via-violet-600 to-purple-600` (3 different accent colors!)
+   - [ERROR] `from-blue-600 to-cyan-600` (mixing blue and cyan)
+   - [ERROR] `from-purple-400 to-pink-400` (unless pink/purple is your ONE accent)
 
    **Keep it simple: If your accent color is blue, use ONLY blue shades (400, 500, 600)**
 
@@ -1215,15 +1224,15 @@ Now I'll update App.jsx to use this component.
 Then ONLY use: bg-slate-*, text-slate-*, and blue-* classes. NO purple, green, cyan, pink, etc.
 
 **QUALITY CHECKLIST - Every Component Should Have:**
-✓ Smooth transitions on interactive elements
-✓ Hover and focus states for accessibility
-✓ Proper shadows for depth and hierarchy
-✓ Responsive sizing (mobile → desktop)
-✓ Consistent spacing using Tailwind's scale
-✓ **ONLY 3 colors used (1 base + 1 text + 1 accent)** ← CRITICAL
-✓ Icons from lucide-react where appropriate
-✓ Rounded corners (rounded-lg, rounded-xl, rounded-2xl)
-✓ Proper contrast for readability"""
+OK Smooth transitions on interactive elements
+OK Hover and focus states for accessibility
+OK Proper shadows for depth and hierarchy
+OK Responsive sizing (mobile -> desktop)
+OK Consistent spacing using Tailwind's scale
+OK **ONLY 3 colors used (1 base + 1 text + 1 accent)** <- CRITICAL
+OK Icons from lucide-react where appropriate
+OK Rounded corners (rounded-lg, rounded-xl, rounded-2xl)
+OK Proper contrast for readability"""
 
     @staticmethod
     def _get_validation_rules() -> str:
@@ -1237,17 +1246,17 @@ Then ONLY use: bg-slate-*, text-slate-*, and blue-* classes. NO purple, green, c
    Go through your App.jsx and check EVERY import line by line:
 
    ```
-   ✓ import HomePage from "./pages/HomePage"
-     → Did I generate src/pages/HomePage.jsx? [YES/NO]
+   OK import HomePage from "./pages/HomePage"
+     -> Did I generate src/pages/HomePage.jsx? [YES/NO]
 
-   ✓ import CartPage from "./pages/CartPage"
-     → Did I generate src/pages/CartPage.jsx? [YES/NO]
+   OK import CartPage from "./pages/CartPage"
+     -> Did I generate src/pages/CartPage.jsx? [YES/NO]
 
-   ✓ import CheckoutPage from "./pages/CheckoutPage"
-     → Did I generate src/pages/CheckoutPage.jsx? [YES/NO]
+   OK import CheckoutPage from "./pages/CheckoutPage"
+     -> Did I generate src/pages/CheckoutPage.jsx? [YES/NO]
 
-   ✓ import Layout from "./components/Layout"
-     → Did I generate src/components/Layout.jsx? [YES/NO]
+   OK import Layout from "./components/Layout"
+     -> Did I generate src/components/Layout.jsx? [YES/NO]
    ```
 
    **If ANY answer is NO, you MUST generate that file before completing.**
@@ -1281,7 +1290,7 @@ Then ONLY use: bg-slate-*, text-slate-*, and blue-* classes. NO purple, green, c
    - Code must follow React best practices
    - Code must be properly formatted and indented
 
-   **⚠️ CRITICAL EXPORT REQUIREMENT - THIS IS MANDATORY:**
+   **[WARNING] CRITICAL EXPORT REQUIREMENT - THIS IS MANDATORY:**
 
    **EVERY .jsx/.tsx component file MUST have `export default`**
 
@@ -1293,7 +1302,7 @@ Then ONLY use: bg-slate-*, text-slate-*, and blue-* classes. NO purple, green, c
    **CORRECT Component Exports (Choose ONE of these patterns):**
 
    ```jsx
-   // ✅ Pattern 1: Inline export default (RECOMMENDED)
+   // [OK] Pattern 1: Inline export default (RECOMMENDED)
    export default function HomePage() {
      return (
        <div className="p-8">
@@ -1304,7 +1313,7 @@ Then ONLY use: bg-slate-*, text-slate-*, and blue-* classes. NO purple, green, c
    ```
 
    ```jsx
-   // ✅ Pattern 2: Function then export
+   // [OK] Pattern 2: Function then export
    function HomePage() {
      return (
        <div className="p-8">
@@ -1319,17 +1328,17 @@ Then ONLY use: bg-slate-*, text-slate-*, and blue-* classes. NO purple, green, c
    **WRONG - These will cause errors:**
 
    ```jsx
-   // ❌ WRONG - Missing export default entirely
+   // [ERROR] WRONG - Missing export default entirely
    function HomePage() {
      return <div>Home</div>;
    }
 
-   // ❌ WRONG - Using named export instead of default
+   // [ERROR] WRONG - Using named export instead of default
    export function HomePage() {
      return <div>Home</div>;
    }
 
-   // ❌ WRONG - Using export { } syntax
+   // [ERROR] WRONG - Using export { } syntax
    function HomePage() {
      return <div>Home</div>;
    }
@@ -1337,11 +1346,11 @@ Then ONLY use: bg-slate-*, text-slate-*, and blue-* classes. NO purple, green, c
    ```
 
    **MANDATORY CHECKLIST FOR EVERY COMPONENT FILE:**
-   ✓ Does the file have `export default FunctionName`? → REQUIRED
-   ✓ Does the component name match the filename? → REQUIRED
-     - HomePage.jsx → `export default function HomePage()`
-     - CartPage.jsx → `export default function CartPage()`
-     - Layout.jsx → `export default function Layout()`
+   OK Does the file have `export default FunctionName`? -> REQUIRED
+   OK Does the component name match the filename? -> REQUIRED
+     - HomePage.jsx -> `export default function HomePage()`
+     - CartPage.jsx -> `export default function CartPage()`
+     - Layout.jsx -> `export default function Layout()`
 
 6. **If Space Is Limited**
    - **CRITICAL**: If you're running low on space, you MUST still generate ALL imported files
@@ -1353,18 +1362,18 @@ Then ONLY use: bg-slate-*, text-slate-*, and blue-* classes. NO purple, green, c
 
 ---
 
-## ⚠️ FINAL VERIFICATION BEFORE SUBMITTING YOUR RESPONSE
+## [WARNING] FINAL VERIFICATION BEFORE SUBMITTING YOUR RESPONSE
 
 **YOU MUST CHECK THESE 2 CRITICAL ITEMS BEFORE COMPLETING:**
 
-### 1. ✓ ALL IMPORTS HAVE FILES?
+### 1. OK ALL IMPORTS HAVE FILES?
 Go through App.jsx line by line:
-- `import HomePage from './pages/HomePage'` → HomePage.jsx exists? ☐
-- `import CartPage from './pages/CartPage'` → CartPage.jsx exists? ☐
-- `import Layout from './components/Layout'` → Layout.jsx exists? ☐
+- `import HomePage from './pages/HomePage'` -> HomePage.jsx exists? ☐
+- `import CartPage from './pages/CartPage'` -> CartPage.jsx exists? ☐
+- `import Layout from './components/Layout'` -> Layout.jsx exists? ☐
 - Count imports: ____ | Count files generated: ____ | MATCH? ☐
 
-### 2. ✓ ALL FILES HAVE `export default`?
+### 2. OK ALL FILES HAVE `export default`?
 Go through each .jsx file:
 - HomePage.jsx has `export default function HomePage()`? ☐
 - CartPage.jsx has `export default function CartPage()`? ☐
@@ -1373,8 +1382,8 @@ Go through each .jsx file:
 **If ANY checkbox is unchecked, FIX IT before submitting your response!**
 
 These 2 errors cause 90% of all broken applications:
-- ❌ Missing file → "Failed to resolve import"
-- ❌ Missing export → "does not provide an export named 'default'"
+- [ERROR] Missing file -> "Failed to resolve import"
+- [ERROR] Missing export -> "does not provide an export named 'default'"
 
 **DO NOT submit your response until both checklists are complete!**"""
 
@@ -1439,7 +1448,7 @@ Here are the existing files in the application. Reference these to understand th
 
             recent_edits = edits[-3:]  # Last 3 edits
             for edit in recent_edits:
-                outcome_emoji = "✅" if edit.outcome == "success" else "⚠️" if edit.outcome == "partial" else "❌"
+                outcome_emoji = "[OK]" if edit.outcome == "success" else "[WARNING]" if edit.outcome == "partial" else "[ERROR]"
                 sections.append(f"- {outcome_emoji} **{edit.edit_type}**: {edit.user_request}")
                 if edit.target_files:
                     sections.append(f"  Files: {', '.join(edit.target_files[:3])}")
@@ -1450,9 +1459,9 @@ Here are the existing files in the application. Reference these to understand th
             sections.append(f"\n- **Edit Style**: {user_preferences.edit_style}")
 
             if user_preferences.edit_style == "targeted":
-                sections.append("  → User prefers precise, minimal edits (only change what's needed)")
+                sections.append("  -> User prefers precise, minimal edits (only change what's needed)")
             else:
-                sections.append("  → User prefers comprehensive rebuilds when making changes")
+                sections.append("  -> User prefers comprehensive rebuilds when making changes")
 
             if user_preferences.common_patterns:
                 sections.append(f"- **Common Patterns**: {', '.join(user_preferences.common_patterns)}")

@@ -241,3 +241,39 @@ def fix_tailwind_classes(content: str) -> str:
     content = content.replace('shadow-3xl', 'shadow-2xl')
 
     return content
+
+
+def extract_sql_migrations(response: str) -> List[Dict[str, str]]:
+    """
+    Extract SQL migration files from AI response.
+
+    Looks for <sql-migration file="..."> tags and extracts the SQL content.
+
+    Args:
+        response: The AI-generated response string
+
+    Returns:
+        List of dictionaries with 'filename' and 'content' keys
+
+    Example:
+        >>> extract_sql_migrations('<sql-migration file="001_create_users.sql">CREATE TABLE users...</sql-migration>')
+        [{'filename': '001_create_users.sql', 'content': 'CREATE TABLE users...'}]
+    """
+    migrations = []
+
+    # Pattern to match SQL migration blocks
+    pattern = r'<sql-migration\s+file="([^"]+)">(.*?)</sql-migration>'
+
+    # Find all matches (DOTALL flag to match across newlines)
+    matches = re.finditer(pattern, response, re.DOTALL)
+
+    for match in matches:
+        filename = match.group(1).strip()
+        content = match.group(2).strip()
+
+        migrations.append({
+            'filename': filename,
+            'content': content
+        })
+
+    return migrations
