@@ -3,6 +3,8 @@
 import json
 import logging
 import re
+import asyncio
+import time
 from typing import AsyncGenerator, Dict, Set, List
 from fastapi import APIRouter, HTTPException, Header
 from sse_starlette.sse import EventSourceResponse
@@ -139,6 +141,49 @@ def normalize_file_path(path: str) -> str:
     return path
 
 
+def parse_env_file(content: str) -> Dict[str, str]:
+    """
+    Parse .env file content into dictionary.
+    
+    Supports:
+    - KEY=value
+    - KEY="value"
+    - KEY='value'
+    - Comments with #
+    - Empty lines
+    
+    Args:
+        content: .env file content
+        
+    Returns:
+        Dictionary of environment variables
+    """
+    env_dict = {}
+    lines = content.strip().split('\n')
+    
+    for line in lines:
+        line = line.strip()
+        
+        # Skip empty lines and comments
+        if not line or line.startswith('#'):
+            continue
+        
+        # Parse KEY=value
+        if '=' in line:
+            key, value = line.split('=', 1)
+            key = key.strip()
+            value = value.strip()
+            
+            # Remove quotes if present
+            if (value.startswith('"') and value.endswith('"')) or \
+               (value.startswith("'") and value.endswith("'")):
+                value = value[1:-1]
+            
+            env_dict[key] = value
+    
+    return env_dict
+
+
 @router.post("/apply-ai-code-stream")
 async def apply_ai_code_stream(
     request_data: ApplyCodeRequest,
@@ -178,6 +223,12 @@ async def apply_ai_code_stream(
                     'commandsExecuted': [],
                     'errors': []
                 }
+                
+                # Track environment variables from .env.local
+                env_vars = {}
+                
+                # Track if Vite has been restarted to avoid multiple restarts
+                vite_restarted = False
 
                 # Send start event
                 yield {
@@ -347,12 +398,105 @@ os.makedirs('{dir_path}', exist_ok=True)
 with open('{full_path}', 'w') as f:
     f.write({json.dumps(content)})
 print('✓ Written: {full_path}')
-""")
+""", envs=env_vars if env_vars else {})
 
                             results['filesCreated'].append(normalized_path)
 
                             # Track file in project state
                             project_state_manager.add_file(project_id, normalized_path, content)
+                            
+                            # If this is a .env file, parse it for environment variables
+                            if normalized_path.endswith(('.env', '.env.local', '.env.development', '.env.production')):
+                                parsed_env = parse_env_file(content)
+                                env_vars.update(parsed_env)
+                                logger.info(f"[apply-ai-code-stream] Captured {len(parsed_env)} env vars from {normalized_path}")
+                                
+                                yield {
+                                    "event": "message",
+                                    "data": json.dumps({
+                                        "type": "status",
+                                        "message": f"Captured {len(parsed_env)} environment variables from {normalized_path}"
+                                    })
+                                }
+                                
+                                # CRITICAL: Restart Vite dev server to reload environment variables
+                                # Vite only reads .env files at startup, not dynamically
+                                if not vite_restarted:
+                                    logger.info(f"[apply-ai-code-stream] Restarting Vite dev server to load new environment variables...")
+                                    
+                                    yield {
+                                        "event": "message",
+                                        "data": json.dumps({
+                                            "type": "status",
+                                            "message": "Restarting dev server to load environment variables..."
+                                        })
+                                    }
+                                    
+                                    try:
+                                        # Kill existing Vite process
+                                        kill_result = sandbox.run_code("""
+import subprocess
+import time
+
+# Kill Vite process
+result = subprocess.run(['pkill', '-f', 'vite'], capture_output=True)
+print('Killed Vite process')
+
+# Wait for process to terminate
+time.sleep(1)
+""", envs={})
+                                        
+                                        logger.info("[apply-ai-code-stream] Killed existing Vite process")
+                                        
+                                        # Restart Vite dev server
+                                        restart_result = sandbox.run_code("""
+import subprocess
+import os
+import time
+
+os.chdir('/home/user/app')
+
+# Start Vite dev server with fresh environment
+env = os.environ.copy()
+env['FORCE_COLOR'] = '0'
+
+process = subprocess.Popen(
+    ['npm', 'run', 'dev'],
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    env=env
+)
+
+print(f'Vite dev server restarted with PID: {process.pid}')
+time.sleep(1)
+""", envs={})
+                                        
+                                        logger.info("[apply-ai-code-stream] Restarted Vite dev server")
+                                        
+                                        # Wait for Vite to be ready
+                                        await asyncio.sleep(3)
+                                        
+                                        vite_restarted = True
+                                        
+                                        yield {
+                                            "event": "message",
+                                            "data": json.dumps({
+                                                "type": "status",
+                                                "message": "Dev server restarted successfully! Environment variables loaded."
+                                            })
+                                        }
+                                        
+                                        logger.info("[apply-ai-code-stream] Vite dev server ready with new environment variables")
+                                        
+                                    except Exception as restart_error:
+                                        logger.error(f"[apply-ai-code-stream] Error restarting dev server: {restart_error}")
+                                        yield {
+                                            "event": "message",
+                                            "data": json.dumps({
+                                                "type": "warning",
+                                                "message": f"Warning: Dev server restart - {str(restart_error)}"
+                                            })
+                                        }
 
                             yield {
                                 "event": "message",
@@ -399,6 +543,8 @@ print('✓ Written: {full_path}')
                                 })
                             }
 
+                            # Execute command with environment variables
+                            # Pass envs directly to run_code as per E2B documentation
                             result = sandbox.run_code(f"""
 import subprocess
 result = subprocess.run(
@@ -409,7 +555,10 @@ result = subprocess.run(
 print(result.stdout)
 if result.stderr:
     print(result.stderr)
-""")
+""", envs=env_vars if env_vars else {})
+                            
+                            logger.info(f"[apply-ai-code-stream] Command executed: {cmd}")
+                            logger.info(f"[apply-ai-code-stream] Output: {result.logs.stdout}")
 
                             results['commandsExecuted'].append(cmd)
 
