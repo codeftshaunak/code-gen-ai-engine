@@ -197,23 +197,36 @@ THIS IS A FULL-STACK PROJECT - Generate both frontend AND backend code with Supa
 ### BACKEND REQUIREMENTS:
 
 1. **Supabase Client Setup (MANDATORY)**
-   Create src/lib/supabase.ts with Supabase client initialization.
+   Create src/lib/supabase.js (JavaScript, NOT TypeScript) with Supabase client initialization.
+   Example:
+   ```javascript
+   import {{ createClient }} from '@supabase/supabase-js';
+   
+   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+   const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+   
+   if (!supabaseUrl || !supabaseKey) {{
+     throw new Error('Missing Supabase environment variables');
+   }}
+   
+   export const supabase = createClient(supabaseUrl, supabaseKey);
+   ```
 
 2. **Database Schema (SQL Migrations)**
    Generate SQL migration files using <sql-migration file="filename.sql"> tags.
    Include CREATE TABLE, Row Level Security policies, and indexes.
 
-3. **Authentication Hooks**
-   Create src/hooks/useAuth.ts for user authentication with signUp, signIn, signOut.
+3. **Authentication Hooks (JavaScript, NOT TypeScript)**
+   Create src/hooks/useAuth.js for user authentication with signUp, signIn, signOut.
+   Use JavaScript (.js), NOT TypeScript (.ts).
 
-4. **Data Hooks for CRUD Operations**
-   Create src/hooks/useEntity.ts for each database entity.
+4. **Data Hooks for CRUD Operations (JavaScript, NOT TypeScript)**
+   Create src/hooks/useEntity.js for each database entity.
    Implement fetch, create, update, delete operations.
+   Use JavaScript (.js), NOT TypeScript (.ts).
+   Example: usePosts.js, useTodos.js, etc.
 
-5. **TypeScript Types**
-   Create src/types/database.ts for type-safe database operations.
-
-6. **Environment Configuration**
+5. **Environment Configuration**
    Generate .env.local file at PROJECT ROOT (same level as package.json, NOT inside src/ folder) with:
    VITE_SUPABASE_URL={api_url}
    VITE_SUPABASE_PROJECT_ID={project_id}
@@ -226,9 +239,11 @@ THIS IS A FULL-STACK PROJECT - Generate both frontend AND backend code with Supa
 - ALWAYS create SQL migrations for database tables
 - ALWAYS implement Row Level Security policies
 - ALWAYS create hooks for data operations
+- ALWAYS use JavaScript (.js) files, NOT TypeScript (.ts)
+- [ERROR] Do NOT create types/ folder - this is a JavaScript project
+- [ERROR] Do NOT create .ts files - use .js instead
 - ALWAYS handle errors gracefully
 - ALWAYS connect frontend to backend using the hooks
-- ALWAYS add @supabase/supabase-js to imports
 """
 
     @staticmethod
