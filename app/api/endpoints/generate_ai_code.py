@@ -123,7 +123,7 @@ async def generate_ai_code_stream(
         
         # In edit mode, retrieve fullstack status and config from conversation state
         if request_data.is_edit:
-            # Check if stored in conversation context
+            # Check if stored in conversation context.
             if conversation_state.context.is_fullstack and conversation_state.context.supabase_config:
                 is_fullstack = True
                 supabase_config = conversation_state.context.supabase_config
