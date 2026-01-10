@@ -49,6 +49,9 @@ class ConversationContext(BaseModel):
     project_evolution: List[ProjectEvolution] = Field(default_factory=list, alias="projectEvolution")
     user_preferences: UserPreferences = Field(default_factory=UserPreferences, alias="userPreferences")
     current_topic: Optional[str] = Field(None, alias="currentTopic")
+    # Project metadata for full-stack projects
+    is_fullstack: bool = Field(default=False, alias="isFullstack", description="Whether this is a full-stack project with Supabase")
+    supabase_config: Optional[Dict[str, Any]] = Field(default=None, alias="supabaseConfig", description="Supabase project configuration")
 
 
 class ConversationState(BaseModel):

@@ -121,8 +121,22 @@ async def generate_ai_code_stream(
         is_fullstack = request_data.is_fullstack
         supabase_config = None
         
-        if not is_fullstack and not request_data.is_edit:
-            # Auto-detect project type for new projects
+        # In edit mode, retrieve fullstack status and config from conversation state
+        if request_data.is_edit:
+            # Check if stored in conversation context
+            if conversation_state.context.is_fullstack and conversation_state.context.supabase_config:
+                is_fullstack = True
+                supabase_config = conversation_state.context.supabase_config
+                logger.info(f"Edit mode: Retrieved Supabase config from conversation state for project {supabase_config.get('project_id')}")
+            # Fallback to request data if available
+            elif request_data.supabase_config:
+                supabase_config = request_data.supabase_config.dict(by_alias=True)
+                is_fullstack = True
+                logger.info(f"Edit mode: Using Supabase config from request")
+            else:
+                logger.info("Edit mode: No Supabase config found, treating as frontend-only")
+        elif not is_fullstack:
+            # Auto-detect project type for new projects (only in non-edit mode)
             try:
                 detection_result = await detect_project_type(request_data.prompt)
                 is_fullstack = detection_result.get("type") == "fullstack"
@@ -212,6 +226,12 @@ async def generate_ai_code_stream(
                                 "supabaseConfig": supabase_config
                             })
                         }
+                        
+                        # Store fullstack metadata in conversation state for future edits
+                        conversation_state.context.is_fullstack = True
+                        conversation_state.context.supabase_config = supabase_config
+                        conversation_manager.update(project_id, conversation_state)
+                        logger.info("Stored fullstack metadata in conversation state")
 
                     except Exception as supabase_error:
                         logger.error(f"Supabase provisioning failed: {str(supabase_error)}")
@@ -309,13 +329,16 @@ async def generate_ai_code_stream(
                 files_generated = generated_code.count("<file path=")
                 packages = _extract_packages(generated_code)
                 
-                # Execute SQL migrations if full-stack
+                # Execute SQL migrations if full-stack (works in both edit and new generation modes)
                 sql_migrations = []
                 if is_fullstack and supabase_config:
                     try:
                         sql_migrations = extract_sql_migrations(generated_code)
                         
                         if sql_migrations:
+                            mode_label = "edit" if request_data.is_edit else "new"
+                            logger.info(f"Found {len(sql_migrations)} SQL migration(s) to execute (mode: {mode_label})")
+                            
                             yield {
                                 "event": "message",
                                 "data": json.dumps({
@@ -324,31 +347,49 @@ async def generate_ai_code_stream(
                                 })
                             }
                             
-                            for migration in sql_migrations:
+                            for idx, migration in enumerate(sql_migrations, 1):
                                 try:
+                                    logger.info(f"Executing migration {idx}/{len(sql_migrations)}: {migration['filename']}")
+                                    
+                                    # Execute SQL on Supabase
                                     result = await supabase_provisioner.execute_sql(
                                         project_id=supabase_config["project_id"],
                                         sql_query=migration["content"]
                                     )
                                     
+                                    logger.info(f"Migration executed successfully: {migration['filename']}")
+                                    
+                                    # Save migration file to project (will be handled by apply_ai_code)
+                                    # Add migration file to generated code for persistence
+                                    migration_path = f"src/supabase/migrations/{migration['filename']}"
+                                    migration_file_tag = f'<file path="{migration_path}">{migration["content"]}</file>'
+                                    generated_code += "\n" + migration_file_tag
+                                    files_generated += 1
+                                    
                                     yield {
                                         "event": "message",
                                         "data": json.dumps({
                                             "type": "status",
-                                            "message": f"Executed migration: {migration['filename']}"
+                                            "message": f"✅ Executed & saved migration: {migration['filename']}"
                                         })
                                     }
                                 except Exception as sql_error:
-                                    logger.error(f"SQL migration failed: {str(sql_error)}")
+                                    logger.error(f"SQL migration failed for {migration['filename']}: {str(sql_error)}")
                                     yield {
                                         "event": "message",
                                         "data": json.dumps({
                                             "type": "warning",
-                                            "message": f"Migration {migration['filename']} failed: {str(sql_error)}"
+                                            "message": f"⚠️ Migration {migration['filename']} failed: {str(sql_error)}"
                                         })
                                     }
+                        else:
+                            logger.info("No SQL migrations found in generated code")
                     except Exception as e:
                         logger.error(f"SQL migration extraction failed: {str(e)}")
+                elif is_fullstack and not supabase_config:
+                    logger.warning("Full-stack project detected but no Supabase config available - SQL migrations skipped")
+                elif not is_fullstack:
+                    logger.debug("Frontend-only project detected - no SQL migrations to execute")
                 
                 # Add @supabase/supabase-js if full-stack
                 if is_fullstack and "@supabase/supabase-js" not in packages:
