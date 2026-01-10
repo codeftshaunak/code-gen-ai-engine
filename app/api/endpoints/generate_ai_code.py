@@ -177,7 +177,7 @@ async def generate_ai_code_stream(
                         }
 
                         # Create project (use sanitized prompt as name)
-                        project_name = f"ai-project-{int(time.time())}"
+                        project_name = f"upfounder-{project_id}"
                         supabase_project = await supabase_provisioner.create_project(
                             org_id=org_id,
                             name=project_name
